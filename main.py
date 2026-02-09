@@ -119,10 +119,17 @@ def safe_api_call(func, *args, **kwargs):
 def load_data(sheet_name):
     try:
         client = init_connection()
-        sheet = safe_api_call(client.open("Academy_DB").worksheet, sheet_name)
+        # 1. 파일 열기 시도
+        doc = client.open("Academy_DB")
+        # 2. 탭(워크시트) 열기 시도
+        sheet = safe_api_call(doc.worksheet, sheet_name)
+        # 3. 데이터 가져오기
         data = safe_api_call(sheet.get_all_records)
         return pd.DataFrame(data)
-    except: return pd.DataFrame()
+    except Exception as e:
+        # 에러가 나면 화면에 빨간 글씨로 띄워줌!
+        st.error(f"🚨 데이터 로드 실패 ({sheet_name}): {e}")
+        return pd.DataFrame()
 
 def clear_cache(): st.cache_data.clear()
 
