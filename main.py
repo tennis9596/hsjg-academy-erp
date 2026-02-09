@@ -79,12 +79,23 @@ st.markdown("""
 def init_connection():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        if "gcp_json" in st.secrets:
-            key_dict = json.loads(st.secrets["gcp_json"])
+        # 1. Streamlit Cloud 비밀키 (TOML 형식)
+        if "gcp_service_account" in st.secrets:
+            key_dict = dict(st.secrets["gcp_service_account"]) # 딕셔너리로 변환
             creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
+        # 2. 기존 방식 (JSON 문자열) 호환
+        elif "gcp_json" in st.secrets:
+            if isinstance(st.secrets["gcp_json"], str):
+                key_dict = json.loads(st.secrets["gcp_json"])
+            else:
+                key_dict = dict(st.secrets["gcp_json"])
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
+        # 3. 로컬 파일 (내 컴퓨터)
         else:
             creds = ServiceAccountCredentials.from_json_keyfile_name("secrets.json", scope)
-    except:
+    except Exception as e:
+        # 에러가 나면 로컬 파일을 찾음
+        print(f"Connection Error: {e}")
         creds = ServiceAccountCredentials.from_json_keyfile_name("secrets.json", scope)
     client = gspread.authorize(creds)
     return client
