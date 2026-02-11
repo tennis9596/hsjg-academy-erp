@@ -77,34 +77,34 @@ st.markdown("""
 # ==========================================
 @st.cache_resource
 def init_connection():
+    import re
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        # 1. Streamlit Cloud 비밀키 (TOML 형식)
-        if "gcp_service_account" in st.secrets:
-            key_dict = dict(st.secrets["gcp_service_account"])
-            # [중요] 비밀키의 줄바꿈 문자를 강제로 올바르게 고침
-            if "private_key" in key_dict:
-                key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
-            
-        # 2. 기존 방식 (JSON 문자열)
-        elif "gcp_json" in st.secrets:
+        # 1. Streamlit Secrets에서 데이터 가져오기
+        if "gcp_json" in st.secrets:
             if isinstance(st.secrets["gcp_json"], str):
                 key_dict = json.loads(st.secrets["gcp_json"])
             else:
                 key_dict = dict(st.secrets["gcp_json"])
-            
-            if "private_key" in key_dict:
-                key_dict["private_key"] = key_dict["private_key"].replace("\\n", "\n")
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
-            
-        # 3. 로컬 파일 (내 컴퓨터)
+        elif "gcp_service_account" in st.secrets:
+            key_dict = dict(st.secrets["gcp_service_account"])
         else:
-            creds = ServiceAccountCredentials.from_json_keyfile_name("secrets.json", scope)
+            raise Exception("Secrets 설정을 찾을 수 없습니다.")
+
+        # [핵심] 비밀키 재조립 (안전한 방식)
+        if "private_key" in key_dict:
+            pk = key_dict["private_key"]
+            pk = pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
+            pk = re.sub(r"\\n", "", pk)
+            pk = re.sub(r"\s+", "", pk)
+            key_dict["private_key"] = "-----BEGIN PRIVATE KEY-----\n" + pk + "\n-----END PRIVATE KEY-----\n"
+
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
+        
     except Exception as e:
-        # 에러가 나면 로컬 파일을 찾음
-        print(f"Connection Error: {e}")
-        creds = ServiceAccountCredentials.from_json_keyfile_name("secrets.json", scope)
+        st.error(f"⚠️ 인증 오류 발생: {e}")
+        return None
+
     client = gspread.authorize(creds)
     return client
 
