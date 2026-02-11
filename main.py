@@ -127,8 +127,12 @@ def safe_api_call(func, *args, **kwargs):
 def load_data(sheet_name):
     try:
         client = init_connection()
-        # 1. 파일 열기 시도
-        doc = client.open("Academy_DB")
+        if client is None: return pd.DataFrame() # 안전장치 추가
+
+        # [중요] 구글 드라이브에 있는 실제 파일 이름과 똑같아야 합니다!
+        # 만약 파일 이름이 'hsjg-academy-erp'라면 아래 "Academy_DB"를 수정하세요.
+        doc = client.open("Academy_DB") 
+        
         # 2. 탭(워크시트) 열기 시도
         sheet = safe_api_call(doc.worksheet, sheet_name)
         # 3. 데이터 가져오기
@@ -149,6 +153,8 @@ def show_center_message(message, icon="✅"):
 def add_data(sheet_name, data_dict):
     try:
         client = init_connection()
+        if client is None: return False
+
         ws = safe_api_call(client.open("Academy_DB").worksheet, sheet_name)
         headers = safe_api_call(ws.row_values, 1)
         
@@ -171,6 +177,8 @@ def add_data_bulk(sheet_name, data_list):
     if not data_list: return
     try:
         client = init_connection()
+        if client is None: return
+
         ws = safe_api_call(client.open("Academy_DB").worksheet, sheet_name)
         headers = safe_api_call(ws.row_values, 1)
         
@@ -193,10 +201,15 @@ def add_data_bulk(sheet_name, data_list):
 def update_data(sheet_name, key_col, key_val, new_data_dict):
     try:
         client = init_connection()
+        if client is None: return False
+
         ws = safe_api_call(client.open("Academy_DB").worksheet, sheet_name)
         data = safe_api_call(ws.get_all_records)
         df = pd.DataFrame(data)
         
+        # 데이터가 비어있거나 키 컬럼이 없는 경우 방지
+        if df.empty or key_col not in df.columns: return False
+
         target_indices = df[df[key_col].astype(str) == str(key_val)].index
         if len(target_indices) == 0: return False
             
@@ -217,6 +230,8 @@ def update_data(sheet_name, key_col, key_val, new_data_dict):
 def delete_data_all(sheet_name, criteria_dict):
     try:
         client = init_connection()
+        if client is None: return False
+
         ws = safe_api_call(client.open("Academy_DB").worksheet, sheet_name)
         data = safe_api_call(ws.get_all_records)
         
