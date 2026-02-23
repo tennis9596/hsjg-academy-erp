@@ -22,62 +22,89 @@ st.set_page_config(page_title="형설지공 학원 ERP", page_icon="🏫", layou
 
 st.markdown("""
 <style>
+    /* 0. 다크모드 무시 및 전체 배경/글자색 강제 고정 */
+    /* 기기가 다크모드여도 배경은 흰색, 글자는 검은색으로 보이게 합니다. */
+    html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+    }
+    
+    /* 사이드바 색상 고정 */
+    [data-testid="stSidebar"] {
+        background-color: #f0f2f6 !important;
+    }
+    [data-testid="stSidebar"] * {
+        color: #000000 !important;
+    }
+
     /* 1. 인쇄 모드 설정 */
     @media print {
         [data-testid="stSidebar"], header, footer, .stButton, .no-print { display: none !important; }
         .block-container { padding: 0 !important; max-width: 100% !important; }
     }
 
-    /* 2. 대시보드 카드 스타일 (추가됨) */
+    /* 2. 대시보드 현황 카드 스타일 */
     .metric-card {
-        background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 10px;
-        padding: 20px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        background-color: #FFFFFF !important; 
+        border: 1px solid #E0E0E0 !important; 
+        border-radius: 10px;
+        padding: 20px; text-align: center; 
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        color: #000000 !important;
     }
-    .metric-title { font-size: 1rem; color: #757575; margin-bottom: 5px; }
-    .metric-value { font-size: 2rem; font-weight: 800; color: #1565C0; }
+    .metric-title { font-size: 1rem; color: #424242 !important; margin-bottom: 5px; font-weight: 500; }
+    .metric-value { font-size: 2rem; font-weight: 800; color: #1565C0 !important; }
 
-    /* 3. 카드형 시간표 스타일 */
+    /* 3. 카드형 시간표 스타일 (정규/보강 공통) */
     .class-card {
-        background-color: #E3F2FD; border-left: 5px solid #1565C0; border-radius: 8px;
-        padding: 8px; margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        border-radius: 8px;
+        padding: 8px; margin-bottom: 5px; 
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         min-height: 100px; display: flex; flex-direction: column; justify-content: center;
+        color: #000000 !important; /* 내부 글자색 검정 고정 */
     }
-    .cc-subject { font-size: 0.8rem; color: #555; font-weight: bold; }
-    .cc-name { font-size: 1.05rem; color: #000; font-weight: 800; margin-bottom: 3px; }
-    .cc-info { font-size: 0.85rem; color: #333; }
-    .cc-time { font-size: 0.9rem; color: #1565C0; font-weight: 700; margin-top: 3px; }
-    .cc-duration { font-size: 0.8rem; color: #E65100; font-weight: 600; }
+    .cc-subject { font-size: 0.8rem; color: #424242 !important; font-weight: bold; }
+    .cc-name { font-size: 1.05rem; color: #000000 !important; font-weight: 800; margin-bottom: 3px; }
+    .cc-info { font-size: 0.85rem; color: #212121 !important; }
+    .cc-time { font-size: 0.9rem; color: #1565C0 !important; font-weight: 700; margin-top: 3px; }
+    .cc-duration { font-size: 0.8rem; color: #E65100 !important; font-weight: 600; }
     
-    .empty-card { background-color: #FAFAFA; border: 2px dashed #E0E0E0; border-radius: 8px; min-height: 100px; }
+    .empty-card { 
+        background-color: #FAFAFA !important; 
+        border: 2px dashed #E0E0E0 !important; 
+        border-radius: 8px; 
+        min-height: 100px; 
+    }
     
     .time-axis-card {
-        background-color: #263238; color: white; border-radius: 8px;
+        background-color: #263238 !important; 
+        color: white !important; 
+        border-radius: 8px;
         min-height: 100px; display: flex; flex-direction: column; align-items: center; justify-content: center;
         padding: 5px; margin-bottom: 5px;
     }
-    .tac-start { font-size: 1.1rem; font-weight: 800; color: #FFD54F; }
-    .tac-tilde { font-size: 0.8rem; margin: 2px 0; color: #aaa; }
-    .tac-end { font-size: 1.0rem; font-weight: 600; color: #fff; }
+    .tac-start { font-size: 1.1rem; font-weight: 800; color: #FFD54F !important; }
+    .tac-tilde { font-size: 0.8rem; margin: 2px 0; color: #BDBDBD !important; }
+    .tac-end { font-size: 1.0rem; font-weight: 600; color: #FFFFFF !important; }
 
-    .day-header { text-align: center; font-weight: 800; background-color: #f1f3f5; padding: 10px 0; border-radius: 5px; margin-bottom: 10px; }
+    .day-header { 
+        text-align: center; font-weight: 800; 
+        background-color: #f1f3f5 !important; 
+        color: #212121 !important;
+        padding: 10px 0; border-radius: 5px; margin-bottom: 10px; 
+    }
     
     /* 4. 달력 스타일 */
-    .cal-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    .cal-th { background-color: #eee; padding: 5px; text-align: center; font-weight: bold; border: 1px solid #ddd; }
-    .cal-td { height: 80px; vertical-align: top; border: 1px solid #ddd; padding: 5px; font-size: 0.9rem; position: relative; }
-    .cal-day-num { font-weight: bold; margin-bottom: 3px; display: block; color: #333; }
-    .cal-badge { display: block; padding: 4px; border-radius: 4px; font-size: 0.8rem; margin-bottom: 2px; color: white; text-align: center; font-weight: bold; }
-    .bg-green { background-color: #4CAF50; } 
-    .bg-red { background-color: #F44336; }    
-    .bg-gray { background-color: #9E9E9E; }   
-    .bg-blue { background-color: #2196F3; }
-
+    .cal-table { width: 100%; border-collapse: collapse; margin-top: 10px; color: #000000 !important; }
+    .cal-th { background-color: #eee !important; color: #000 !important; padding: 5px; text-align: center; font-weight: bold; border: 1px solid #ddd; }
+    .cal-td { height: 80px; vertical-align: top; border: 1px solid #ddd; padding: 5px; font-size: 0.9rem; position: relative; background-color: #FFF !important; }
+    .cal-day-num { font-weight: bold; margin-bottom: 3px; display: block; color: #333 !important; }
+    
     /* 5. 알림 메시지 */
-    .custom-alert { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: rgba(46, 125, 50, 0.95); color: white; padding: 25px 50px; border-radius: 15px; font-size: 22px; font-weight: bold; z-index: 99999; animation: fadeInOut 2s forwards; border: 2px solid #fff; }
-    @keyframes fadeInOut { 0% { opacity: 0; transform: translate(-50%, -40%); } 15% { opacity: 1; transform: translate(-50%, -50%); } 85% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -60%); } }
+    .custom-alert { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: rgba(46, 125, 50, 0.95); color: white !important; padding: 25px 50px; border-radius: 15px; font-size: 22px; font-weight: bold; z-index: 99999; animation: fadeInOut 2s forwards; border: 2px solid #fff; }
     
     /* 6. 요일 뱃지 */
-    .day-badge-single { padding: 8px 0; border-radius: 8px; color: #444; font-weight: 800; text-align: center; display: block; width: 100%; border: 1px solid rgba(0,0,0,0.05); font-size: 0.9rem; }
+    .day-badge-single { padding: 8px 0; border-radius: 8px; color: #212121 !important; font-weight: 800; text-align: center; display: block; width: 100%; border: 1px solid rgba(0,0,0,0.1); font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
 
