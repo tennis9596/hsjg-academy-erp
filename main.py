@@ -1,5 +1,6 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
+from streamlit_autorefresh import st_autorefresh
 import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
@@ -27,7 +28,15 @@ st.markdown("""
         .block-container { padding: 0 !important; max-width: 100% !important; }
     }
 
-    /* 2. 카드형 시간표 스타일 */
+    /* 2. 대시보드 카드 스타일 (추가됨) */
+    .metric-card {
+        background-color: #FFFFFF; border: 1px solid #E0E0E0; border-radius: 10px;
+        padding: 20px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    .metric-title { font-size: 1rem; color: #757575; margin-bottom: 5px; }
+    .metric-value { font-size: 2rem; font-weight: 800; color: #1565C0; }
+
+    /* 3. 카드형 시간표 스타일 */
     .class-card {
         background-color: #E3F2FD; border-left: 5px solid #1565C0; border-radius: 8px;
         padding: 8px; margin-bottom: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -52,7 +61,7 @@ st.markdown("""
 
     .day-header { text-align: center; font-weight: 800; background-color: #f1f3f5; padding: 10px 0; border-radius: 5px; margin-bottom: 10px; }
     
-    /* 3. 달력 스타일 */
+    /* 4. 달력 스타일 */
     .cal-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     .cal-th { background-color: #eee; padding: 5px; text-align: center; font-weight: bold; border: 1px solid #ddd; }
     .cal-td { height: 80px; vertical-align: top; border: 1px solid #ddd; padding: 5px; font-size: 0.9rem; position: relative; }
@@ -63,11 +72,11 @@ st.markdown("""
     .bg-gray { background-color: #9E9E9E; }   
     .bg-blue { background-color: #2196F3; }
 
-    /* 4. 알림 메시지 */
+    /* 5. 알림 메시지 */
     .custom-alert { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: rgba(46, 125, 50, 0.95); color: white; padding: 25px 50px; border-radius: 15px; font-size: 22px; font-weight: bold; z-index: 99999; animation: fadeInOut 2s forwards; border: 2px solid #fff; }
     @keyframes fadeInOut { 0% { opacity: 0; transform: translate(-50%, -40%); } 15% { opacity: 1; transform: translate(-50%, -50%); } 85% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -60%); } }
     
-    /* 5. 요일 뱃지 */
+    /* 6. 요일 뱃지 */
     .day-badge-single { padding: 8px 0; border-radius: 8px; color: #444; font-weight: 800; text-align: center; display: block; width: 100%; border: 1px solid rgba(0,0,0,0.05); font-size: 0.9rem; }
 </style>
 """, unsafe_allow_html=True)
@@ -80,7 +89,6 @@ def init_connection():
     import re
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     try:
-        # 1. Streamlit Secrets에서 데이터 가져오기
         if "gcp_json" in st.secrets:
             if isinstance(st.secrets["gcp_json"], str):
                 key_dict = json.loads(st.secrets["gcp_json"])
@@ -91,7 +99,6 @@ def init_connection():
         else:
             raise Exception("Secrets 설정을 찾을 수 없습니다.")
 
-        # [핵심] 비밀키 재조립 (안전한 방식)
         if "private_key" in key_dict:
             pk = key_dict["private_key"]
             pk = pk.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "")
@@ -100,7 +107,6 @@ def init_connection():
             key_dict["private_key"] = "-----BEGIN PRIVATE KEY-----\n" + pk + "\n-----END PRIVATE KEY-----\n"
 
         creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
-        
     except Exception as e:
         st.error(f"⚠️ 인증 오류 발생: {e}")
         return None
@@ -127,20 +133,14 @@ def safe_api_call(func, *args, **kwargs):
 def load_data(sheet_name):
     try:
         client = init_connection()
-        if client is None: return pd.DataFrame() # 안전장치 추가
+        if client is None: return pd.DataFrame() 
 
-        # [중요] 구글 드라이브에 있는 실제 파일 이름과 똑같아야 합니다!
-        # 만약 파일 이름이 'hsjg-academy-erp'라면 아래 "Academy_DB"를 수정하세요.
         doc = client.open("Academy_DB") 
-        
-        # 2. 탭(워크시트) 열기 시도
         sheet = safe_api_call(doc.worksheet, sheet_name)
-        # 3. 데이터 가져오기
         data = safe_api_call(sheet.get_all_records)
         return pd.DataFrame(data)
     except Exception as e:
-        # 에러가 나면 화면에 빨간 글씨로 띄워줌!
-        st.error(f"🚨 데이터 로드 실패 ({sheet_name}): {e}")
+        # st.error(f"🚨 데이터 로드 실패 ({sheet_name}): {e}") # 사용자 경험을 위해 에러 숨김 처리
         return pd.DataFrame()
 
 def clear_cache(): st.cache_data.clear()
@@ -207,7 +207,6 @@ def update_data(sheet_name, key_col, key_val, new_data_dict):
         data = safe_api_call(ws.get_all_records)
         df = pd.DataFrame(data)
         
-        # 데이터가 비어있거나 키 컬럼이 없는 경우 방지
         if df.empty or key_col not in df.columns: return False
 
         target_indices = df[df[key_col].astype(str) == str(key_val)].index
@@ -304,15 +303,16 @@ def decode_qr(image_input):
     except: return None
 
 # ==========================================
-# [메뉴] 사이드바 구성 (순서 재배치)
+# [메뉴] 사이드바 구성 
 # ==========================================
 with st.sidebar:
     st.title("🏫 형설지공 학원")
-    st.markdown("# 🎓 통합 ERP 시스템")
+    st.markdown("### 🎓 통합 ERP 시스템")
     st.markdown("---")
     
     menu = option_menu("메뉴 선택", 
         [
+            "🏠 대시보드",
             "1. 강사 관리", 
             "2. 학생 관리", 
             "3. 반 관리", 
@@ -324,6 +324,7 @@ with st.sidebar:
             "9. 학생 개인별 종합"
         ], 
         icons=[
+            'house',            # 대시보드
             'person-video3',    # 1. 강사
             'backpack',         # 2. 학생
             'easel',            # 3. 반
@@ -348,13 +349,173 @@ with st.sidebar:
             "nav-link-selected": {"background-color": "#02ab21"},
         }
     )
+    
+    if st.button("🔄 데이터 새로고침", use_container_width=True):
+        clear_cache()
+        st.rerun()
+
     st.markdown("---")
     st.caption("Developed by 형설지공 2026")
+
+# ==========================================
+# 🏠 대시보드 (메인 화면)
+# ==========================================
+if menu == "🏠 대시보드":
+    from streamlit_autorefresh import st_autorefresh
+    st_autorefresh(interval=60000, limit=None, key="dashboard_refresh")
+    
+    # [핵심] 타임머신 기능: 조회할 날짜 선택 (형식을 YYYY/MM/DD로 지정)
+    col_title, col_date = st.columns([3, 1])
+    with col_title:
+        st.subheader("📊 학원 일일 현황 대시보드")
+    with col_date:
+        selected_date = st.date_input("🗓️ 조회 날짜 선택", datetime.today().date(), format="YYYY/MM/DD")
+    
+    df_s = load_data('students')
+    df_t = load_data('teachers')
+    df_c = load_data('classes')
+    df_a = load_data('attendance')
+    df_e = load_data('enrollments') 
+    
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.markdown(f"""<div class="metric-card"><div class="metric-title">총 재원생</div><div class="metric-value">{len(df_s)}명</div></div>""", unsafe_allow_html=True)
+    with c2: st.markdown(f"""<div class="metric-card"><div class="metric-title">총 선생님</div><div class="metric-value">{len(df_t)}명</div></div>""", unsafe_allow_html=True)
+    with c3: st.markdown(f"""<div class="metric-card"><div class="metric-title">개설된 반</div><div class="metric-value">{len(df_c)}개</div></div>""", unsafe_allow_html=True)
+    with c4:
+        target_att = 0
+        if not df_a.empty:
+            target_str = str(selected_date)
+            target_att = len(df_a[df_a.iloc[:,0].astype(str) == target_str])
+        st.markdown(f"""<div class="metric-card"><div class="metric-title">{selected_date.month}월 {selected_date.day}일 등원</div><div class="metric-value">{target_att}명</div></div>""", unsafe_allow_html=True)
+
+    st.divider()
+
+    st.markdown(f"##### 🚨 {selected_date.month}/{selected_date.day} 지각 현황")
+    if not df_a.empty:
+        target_str = str(selected_date)
+        late_students = df_a[(df_a.iloc[:,0].astype(str) == target_str) & (df_a.iloc[:,3] == '지각')]
+        
+        # 오늘 날짜일 때만 팝업 알림 작동
+        if selected_date == datetime.today().date():
+            current_late_count = len(late_students) if not late_students.empty else 0
+            if 'last_late_count' not in st.session_state: st.session_state.last_late_count = current_late_count
+            if current_late_count > st.session_state.last_late_count:
+                st.toast("🚨 입구 키오스크: 새로운 지각생이 확인되었습니다!", icon="🚨")
+                st.session_state.last_late_count = current_late_count
+        
+        if not late_students.empty:
+            for _, row in late_students.iterrows():
+                s_name, c_name, check_time = row.iloc[2], row.iloc[1], row.iloc[4]
+                s_extra_info = ""
+                if not df_s.empty:
+                    matched_s = df_s[df_s.iloc[:,0] == s_name]
+                    if not matched_s.empty:
+                        s_row = matched_s.iloc[0]
+                        s_grade = s_row.iloc[3] if len(s_row)>3 else ""
+                        s_phone = str(s_row.iloc[1])[-4:] if len(str(s_row.iloc[1])) >= 4 else ""
+                        s_extra_info = f"({s_grade}, 폰: {s_phone})"
+                st.error(f"🚩 **지각 발생**: {s_name} {s_extra_info} | {c_name} | {check_time}에 체크됨")
+        else:
+            st.success("✅ 해당 날짜에 지각생이 없습니다.")
+    else:
+        st.info("출석 데이터가 아직 없습니다.")
+
+    st.divider()
+    
+    st.markdown(f"##### 📅 {selected_date.month}/{selected_date.day} 강의실 배정 현황 및 수강 명단")
+    days_ko = ["월", "화", "수", "목", "금", "토", "일"]
+    target_yoil = days_ko[selected_date.weekday()]
+    
+    target_classes = []
+    if not df_c.empty:
+        for _, row in df_c.iterrows():
+            c_type = row['구분'] if '구분' in df_c.columns else '정규'
+            c_start = row['시작일'] if '시작일' in df_c.columns else ''
+            c_end = row['종료일'] if '종료일' in df_c.columns else ''
+            c_reason = row['사유'] if '사유' in df_c.columns else ''
+            
+            is_valid_date = True
+            if c_type == '보강' and c_start and c_end:
+                try:
+                    s_dt = datetime.strptime(str(c_start), "%Y-%m-%d").date()
+                    e_dt = datetime.strptime(str(c_end), "%Y-%m-%d").date()
+                    if not (s_dt <= selected_date <= e_dt): is_valid_date = False
+                except: pass
+            
+            if is_valid_date:
+                sche_str = str(row.iloc[2])
+                if target_yoil in sche_str:
+                    for part in sche_str.split(','):
+                        if part.strip().startswith(target_yoil):
+                            t_range = part.strip().split()[1]
+                            start_t = t_range.split('-')[0]
+                            
+                            enrolled_students = []
+                            if not df_e.empty:
+                                matched_enrolls = df_e[df_e.iloc[:,2] == row.iloc[0]]
+                                if not matched_enrolls.empty:
+                                    for sn in matched_enrolls.iloc[:,0].tolist():
+                                        s_grade = ""
+                                        if not df_s.empty:
+                                            s_info = df_s[df_s.iloc[:,0] == sn]
+                                            if not s_info.empty and len(s_info.columns)>3:
+                                                s_grade = str(s_info.iloc[0, 3]).replace("초등학교", "초").replace("중학교", "중").replace("고등학교", "고")
+                                        enrolled_students.append(f"{sn}({s_grade})" if s_grade else sn)
+                                        
+                            target_classes.append({
+                                'time': t_range, 'start_t': start_t, 'name': row.iloc[0],
+                                'teacher': row.iloc[1], 'room': row.iloc[3] if len(row) > 3 else "기타",
+                                'students': enrolled_students, 'type': c_type, 'reason': c_reason
+                            })
+
+    if target_classes:
+        rooms = ["101호", "102호", "103호", "104호", "기타"]
+        unique_starts = sorted(list(set(tc['start_t'] for tc in target_classes)))
+        
+        header_cols = st.columns([1] + [2]*len(rooms))
+        header_cols[0].markdown("<div class='day-header'>⏰ 시간</div>", unsafe_allow_html=True)
+        for i, r in enumerate(rooms): header_cols[i+1].markdown(f"<div class='day-header'>{r}</div>", unsafe_allow_html=True)
+            
+        for start_t in unique_starts:
+            cols = st.columns([1] + [2]*len(rooms))
+            cols[0].markdown(f"<div class='time-axis-card'><span class='tac-start'>{start_t}</span></div>", unsafe_allow_html=True)
+            
+            for i, r in enumerate(rooms):
+                matched = [tc for tc in target_classes if tc['room'] == r and tc['start_t'] == start_t]
+                with cols[i+1]:
+                    if matched:
+                        for mc in matched:
+                            student_count = len(mc['students'])
+                            std_str = ", ".join(mc['students']) if student_count > 0 else "배정생 없음"
+                            
+                            if mc['type'] == '보강':
+                                card_style = "background-color: #FFF3E0; border-left-color: #FF9800;"
+                                title_color = "#E65100"
+                                badge = f"<span style='background-color:#FF9800; color:white; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;'>보강: {mc['reason']}</span>"
+                            else:
+                                card_style = "background-color: #E3F2FD; border-left-color: #1565C0;"
+                                title_color = "#1565C0"
+                                badge = ""
+                            
+                            st.markdown(f"""
+                            <div class='class-card' style='min-height: 80px; {card_style}'>
+                                <div class='cc-name'>{mc['name']} {badge}</div>
+                                <div class='cc-info'>👨‍🏫 {mc['teacher']}</div>
+                                <div class='cc-info' style='margin-top:6px; font-size:0.8rem; color:#424242; line-height: 1.3;'>
+                                    <strong style='color:{title_color}; font-size:0.85rem;'>👥 총 {student_count}명</strong><br>
+                                    <span style='color:#666;'>{std_str}</span>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                    else:
+                        st.markdown("<div class='empty-card' style='min-height: 80px; display:flex; align-items:center; justify-content:center; color:#ccc; font-size:0.8rem;'>비어있음</div>", unsafe_allow_html=True)
+    else:
+        st.success("해당 날짜에 예정된 수업이 없습니다.")
 
 # ==========================================================
 # 1. 강사 관리
 # ==========================================================
-if menu == "1. 강사 관리":
+elif menu == "1. 강사 관리":
     st.subheader("👨‍🏫 강사 관리")
     tab1, tab2 = st.tabs(["➕ 신규 등록", "🔧 수정 및 삭제"])
     
@@ -610,15 +771,29 @@ elif menu == "3. 반 관리":
     mins = ["00분", "10분", "20분", "30분", "40분", "50분"]
     rooms = ["기타", "101호", "102호", "103호", "104호"]
 
+    # ------------------------------------------
+    # [Tab 1] 반 개설
+    # ------------------------------------------
     with tab1:
         df_t = load_data('teachers')
         if df_t.empty: st.warning("선생님을 먼저 등록해주세요.")
         else:
+            class_type = st.radio("수업 구분", ["📘 정규 수업", "📙 보강/단기특강"], horizontal=True)
+            st.divider()
+
             t_opts = (get_col_data(df_t, '이름', 0) + " (" + get_col_data(df_t, '과목', 1) + ")").tolist()
             c1, c2, c3 = st.columns([2, 1, 2])
-            c_name = c1.text_input("반 이름", key="new_c_name")
+            c_name = c1.text_input("반 이름 (예: 중2 수학 보강)", key="new_c_name")
             c_room = c2.selectbox("강의실", rooms, key="new_c_room")
             t_name = c3.selectbox("담당 선생님", t_opts, key="new_t_name")
+            
+            start_d, end_d, reason = "", "", ""
+            if class_type == "📙 보강/단기특강":
+                st.info("💡 보강은 지정된 기간(날짜)에만 시간표에 표시되며 지각/결석 체크가 진행됩니다.")
+                dc1, dc2, dc3 = st.columns(3)
+                start_d = dc1.date_input("시작일")
+                end_d = dc2.date_input("종료일")
+                reason = dc3.selectbox("보강 사유", ["휴일 대체", "시험 대비", "진도 보충", "질의응답", "기타"])
             
             st.write("🕒 **요일 및 시간 설정**")
             schedule_data = {}
@@ -639,12 +814,22 @@ elif menu == "3. 반 관리":
             if st.button("반 만들기 (저장)", type="primary"):
                 if not c_name: st.error("반 이름을 입력해주세요.")
                 elif not schedule_data: st.error("요일을 최소 하나 이상 선택해주세요.")
+                elif class_type == "📙 보강/단기특강" and start_d > end_d: st.error("종료일이 시작일보다 빠를 수 없습니다.")
                 else:
                     final_sche = [f"{d} {t}" for d, t in schedule_data.items()]
-                    add_data('classes', {'반이름': c_name, '선생님': t_name, '시간': ", ".join(final_sche), '강의실': c_room})
+                    add_data('classes', {
+                        '반이름': c_name, '선생님': t_name, '시간': ", ".join(final_sche), '강의실': c_room,
+                        '구분': "보강" if "보강" in class_type else "정규",
+                        '시작일': str(start_d) if start_d else "",
+                        '종료일': str(end_d) if end_d else "",
+                        '사유': reason
+                    })
                     show_center_message(f"'{c_name}' 개설 완료!")
                     time.sleep(1); st.rerun()
 
+    # ------------------------------------------
+    # [Tab 2] 반 수정 및 삭제
+    # ------------------------------------------
     with tab2:
         df_c = load_data('classes')
         df_t = load_data('teachers')
@@ -660,6 +845,13 @@ elif menu == "3. 반 관리":
                 curr_schedule_str = str(curr_row.iloc[2])
                 curr_room = str(curr_row.iloc[3]) if len(curr_row) > 3 else "기타"
                 if curr_room not in rooms: curr_room = "기타"
+                
+                # 기존 정규/보강 데이터 불러오기 (없으면 기본값)
+                curr_type = curr_row['구분'] if '구분' in df_c.columns else '정규'
+                curr_sd_str = curr_row['시작일'] if '시작일' in df_c.columns else ''
+                curr_ed_str = curr_row['종료일'] if '종료일' in df_c.columns else ''
+                curr_reason = curr_row['사유'] if '사유' in df_c.columns else '기타'
+                
                 curr_sche_map = {}
                 for p in curr_schedule_str.split(','):
                     kp = p.strip().split()
@@ -667,11 +859,34 @@ elif menu == "3. 반 관리":
 
                 st.divider()
                 st.markdown(f"#### 🔧 '{sel_c_name}' 정보 수정")
+                
+                # 수업 구분 수정
+                u_class_type = st.radio("수업 구분 수정", ["📘 정규 수업", "📙 보강/단기특강"], index=0 if curr_type == '정규' else 1, horizontal=True, key=f"edit_type_{sel_c_name}")
+                st.divider()
+                
                 uc1, uc2, uc3 = st.columns([2, 1, 2])
                 u_c_name = uc1.text_input("반 이름", value=sel_c_name, key=f"edit_n_{sel_c_name}")
                 u_room = uc2.selectbox("강의실", rooms, index=rooms.index(curr_room), key=f"edit_r_{sel_c_name}")
                 t_idx = t_opts.index(curr_teacher) if curr_teacher in t_opts else 0
                 u_t_name = uc3.selectbox("담당 선생님", t_opts, index=t_idx, key=f"edit_t_{sel_c_name}")
+                
+                # 보강일 경우 날짜/사유 수정
+                u_start_d, u_end_d, u_reason = "", "", ""
+                if u_class_type == "📙 보강/단기특강":
+                    udc1, udc2, udc3 = st.columns(3)
+                    
+                    # 날짜 기본값 세팅
+                    try: def_sd = datetime.strptime(str(curr_sd_str), "%Y-%m-%d").date() if curr_sd_str else datetime.today().date()
+                    except: def_sd = datetime.today().date()
+                    try: def_ed = datetime.strptime(str(curr_ed_str), "%Y-%m-%d").date() if curr_ed_str else datetime.today().date()
+                    except: def_ed = datetime.today().date()
+                    
+                    u_start_d = udc1.date_input("시작일", value=def_sd, key=f"u_sd_{sel_c_name}")
+                    u_end_d = udc2.date_input("종료일", value=def_ed, key=f"u_ed_{sel_c_name}")
+                    
+                    r_opts = ["휴일 대체", "시험 대비", "진도 보충", "질의응답", "기타"]
+                    r_idx = r_opts.index(curr_reason) if curr_reason in r_opts else 4
+                    u_reason = udc3.selectbox("보강 사유", r_opts, index=r_idx, key=f"u_reason_{sel_c_name}")
                 
                 st.write("🕒 **시간 수정**")
                 u_updated_sche = []
@@ -705,13 +920,25 @@ elif menu == "3. 반 관리":
                 ub1, ub2 = st.columns(2)
                 
                 if ub1.button("💾 수정사항 저장", type="primary"):
-                    st.session_state['confirm_action'] = 'update_class'
+                    if u_class_type == "📙 보강/단기특강" and u_start_d > u_end_d:
+                        st.error("종료일이 시작일보다 빠를 수 없습니다.")
+                    else:
+                        st.session_state['confirm_action'] = 'update_class'
                 
                 if st.session_state.get('confirm_action') == 'update_class':
                     st.warning(f"⚠️ '{sel_c_name}' 반 정보를 수정하시겠습니까?")
                     col_y, col_n = st.columns([1,1])
                     if col_y.button("네, 수정합니다", type="primary"):
-                        nd = {'반이름': u_c_name, '선생님': u_t_name, '시간': ", ".join(u_updated_sche), '강의실': u_room}
+                        nd = {
+                            '반이름': u_c_name, 
+                            '선생님': u_t_name, 
+                            '시간': ", ".join(u_updated_sche), 
+                            '강의실': u_room,
+                            '구분': "보강" if "보강" in u_class_type else "정규",
+                            '시작일': str(u_start_d) if u_start_d else "",
+                            '종료일': str(u_end_d) if u_end_d else "",
+                            '사유': u_reason
+                        }
                         update_data('classes', '반이름', sel_c_name, nd)
                         st.session_state['confirm_action'] = None
                         show_center_message("수정 완료!")
@@ -886,28 +1113,61 @@ elif menu == "5. QR 키오스크(출석)":
                 student_row = df_s[df_s['이름'] == s_name]
                 if student_row.empty: st.error("등록되지 않은 학생입니다.")
                 else:
-                    now = datetime.now(); today_weekday = ["월", "화", "수", "목", "금", "토", "일"][now.weekday()]; current_time_str = now.strftime("%H:%M")
-                    my_classes = df_e[df_e.iloc[:,0] == s_name]; found_class_today = False
+                    now = datetime.now()
+                    today_weekday = ["월", "화", "수", "목", "금", "토", "일"][now.weekday()]
+                    current_time_str = now.strftime("%H:%M")
+                    my_classes = df_e[df_e.iloc[:,0] == s_name]
+                    found_class_today = False
+                    
                     if not my_classes.empty:
                         for _, row in my_classes.iterrows():
-                            c_name = row.iloc[1]; c_info = df_c[df_c.iloc[:,0] == c_name]
+                            c_name = row.iloc[1]
+                            c_info = df_c[df_c.iloc[:,0] == c_name]
                             if not c_info.empty:
-                                schedule_str = str(c_info.iloc[0, 2])
-                                if today_weekday in schedule_str:
+                                c_row = c_info.iloc[0]
+                                schedule_str = str(c_row.iloc[2])
+                                
+                                # [추가] 보강반일 경우 오늘 날짜가 기간 내에 있는지 확인
+                                c_type = c_row['구분'] if '구분' in df_c.columns else '정규'
+                                is_valid_today = True
+                                if c_type == '보강':
+                                    c_start = c_row['시작일'] if '시작일' in df_c.columns else ''
+                                    c_end = c_row['종료일'] if '종료일' in df_c.columns else ''
+                                    try:
+                                        s_dt = datetime.strptime(str(c_start), "%Y-%m-%d").date()
+                                        e_dt = datetime.strptime(str(c_end), "%Y-%m-%d").date()
+                                        if not (s_dt <= now.date() <= e_dt): is_valid_today = False
+                                    except: pass
+                                
+                                if is_valid_today and today_weekday in schedule_str:
                                     for part in schedule_str.split(','):
                                         if part.strip().startswith(today_weekday):
-                                            t_range = part.strip().split()[1]; start_time_str = t_range.split('-')[0]
-                                            s_time = datetime.strptime(start_time_str, "%H:%M"); s_time = now.replace(hour=s_time.hour, minute=s_time.minute, second=0)
-                                            status = "출석"; msg = f"{s_name} 학생, 환영합니다! (수업: {c_name})"; limit_time = s_time + timedelta(minutes=10)
-                                            if now > limit_time: status = "지각"; msg = f"🚨 {s_name} 학생, 지각입니다! (수업: {c_name})"
-                                            elif now < (s_time - timedelta(minutes=60)): status = "보강/자습"; msg = f"{s_name} 학생, 일찍 왔네요! 자습하세요."
+                                            t_range = part.strip().split()[1]
+                                            start_time_str = t_range.split('-')[0]
+                                            s_time = datetime.strptime(start_time_str, "%H:%M")
+                                            s_time = now.replace(hour=s_time.hour, minute=s_time.minute, second=0)
+                                            
+                                            status = "출석"
+                                            msg = f"{s_name} 학생, 환영합니다! (수업: {c_name})"
+                                            limit_time = s_time + timedelta(minutes=10)
+                                            
+                                            if now > limit_time: 
+                                                status = "지각"
+                                                msg = f"🚨 {s_name} 학생, 지각입니다! (수업: {c_name})"
+                                            elif now < (s_time - timedelta(minutes=60)): 
+                                                status = "보강/자습"
+                                                msg = f"{s_name} 학생, 일찍 왔네요! 자습하세요."
+                                                
                                             add_data('attendance', {'날짜': str(now.date()), '반이름': c_name, '학생': s_name, '상태': status, '비고': f"QR체크({current_time_str})"})
                                             if status == "지각": st.error(msg)
                                             else: st.success(msg)
-                                            found_class_today = True; break
+                                            found_class_today = True
+                                            break
                     if not found_class_today:
-                        st.info(f"{s_name} 학생, 오늘은 정규 수업이 없습니다."); 
-                        if st.button("보강 출석 확인"): add_data('attendance', {'날짜': str(now.date()), '반이름': "보강/자습", '학생': s_name, '상태': "보강", '비고': f"QR체크({current_time_str})"}); st.success("보강 출석 처리되었습니다.")
+                        st.info(f"{s_name} 학생, 오늘은 정규 및 보강 수업이 없습니다."); 
+                        if st.button("자습 출석 확인"): 
+                            add_data('attendance', {'날짜': str(now.date()), '반이름': "자습", '학생': s_name, '상태': "보강", '비고': f"QR체크({current_time_str})"})
+                            st.success("자습 출석 처리되었습니다.")
             except: st.error("QR 오류")
         else: st.warning("QR 인식 실패")
 
@@ -989,10 +1249,12 @@ elif menu == "7. 강사별 시간표":
                                         try:
                                             s, e = tp.split()[1].split('-')
                                             if s == start_t:
+                                                c_type = row['구분'] if '구분' in df_c.columns else '정규'
+                                                c_reason = row['사유'] if '사유' in df_c.columns else ''
                                                 found_list.append({
                                                     'sub': t_subs.iloc[idx], 'name': row.iloc[0], 
-                                                    'room': row.iloc[3], 'time': tp.split()[1], 
-                                                    'dur': calc_duration_min(s, e)
+                                                    'room': row.iloc[3] if len(row)>3 else "기타", 'time': tp.split()[1], 
+                                                    'dur': calc_duration_min(s, e), 'type': c_type, 'reason': c_reason
                                                 })
                                         except: pass
                             with cols[i+1]:
@@ -1008,7 +1270,16 @@ elif menu == "7. 강사별 시간표":
                                                     for _, r in matched_std.iterrows(): detail_info.append(f"• {r.iloc[0]} ({r.iloc[3]}, {r.iloc[4]})")
                                                 except: pass
                                             std_count = len(detail_info)
-                                            st.markdown(f"""<div class='class-card'><div class='cc-subject'>{found['sub']}</div><div class='cc-name'>{found['name']}</div><div class='cc-info'>🏫 {found['room']}</div><div class='cc-time'>⏰ {found['time']}</div><div class='cc-duration'>⏳ {found['dur']}분</div></div>""", unsafe_allow_html=True)
+                                            
+                                            # [핵심] 보강반 오렌지색 스타일 적용
+                                            if found['type'] == '보강':
+                                                card_style = "background-color: #FFF3E0; border-left-color: #FF9800;"
+                                                badge = f"<div style='background-color:#FF9800; color:white; padding:2px 4px; border-radius:4px; font-size:0.65rem; display:inline-block; margin-bottom:3px;'>보강: {found['reason']}</div>"
+                                            else:
+                                                card_style = "background-color: #E3F2FD; border-left-color: #1565C0;"
+                                                badge = ""
+                                                
+                                            st.markdown(f"""<div class='class-card' style='{card_style}'>{badge}<div class='cc-subject'>{found['sub']}</div><div class='cc-name'>{found['name']}</div><div class='cc-info'>🏫 {found['room']}</div><div class='cc-time'>⏰ {found['time']}</div><div class='cc-duration'>⏳ {found['dur']}분</div></div>""", unsafe_allow_html=True)
                                             with st.popover(f"👥 {std_count}명", use_container_width=True):
                                                 st.markdown(f"**{found['name']} 수강생 ({std_count}명)**")
                                                 if detail_info:
@@ -1056,7 +1327,7 @@ elif menu == "8. 강의실별 시간표":
                         for i, r in enumerate(rooms):
                             found_list = []
                             for r_data, t_str in day_classes:
-                                curr_r = str(r_data.iloc[3])
+                                curr_r = str(r_data.iloc[3]) if len(r_data)>3 else "기타"
                                 if curr_r not in rooms: curr_r = "기타"
                                 if curr_r == r:
                                     try:
@@ -1065,7 +1336,9 @@ elif menu == "8. 강의실별 시간표":
                                             full_tea = str(r_data.iloc[1])
                                             tn = full_tea.split('(')[0] if "(" in full_tea else full_tea
                                             sub = full_tea.split('(')[1].replace(')', '') if "(" in full_tea else "과목"
-                                            found_list.append({'sub': sub, 'name': r_data.iloc[0], 'tea': tn, 'time': t_str, 'dur': calc_duration_min(s, e)})
+                                            c_type = r_data['구분'] if '구분' in df_c.columns else '정규'
+                                            c_reason = r_data['사유'] if '사유' in df_c.columns else ''
+                                            found_list.append({'sub': sub, 'name': r_data.iloc[0], 'tea': tn, 'time': t_str, 'dur': calc_duration_min(s, e), 'type': c_type, 'reason': c_reason})
                                     except: pass
                             with cols[i+1]:
                                 if found_list:
@@ -1080,7 +1353,16 @@ elif menu == "8. 강의실별 시간표":
                                                     for _, r in matched_std.iterrows(): detail_info.append(f"• {r.iloc[0]} ({r.iloc[3]}, {r.iloc[4]})")
                                                 except: pass
                                             std_count = len(detail_info)
-                                            st.markdown(f"""<div class='class-card' style='border-left-color:#43A047;background-color:#E8F5E9;'><div class='cc-subject'>{found['sub']}</div><div class='cc-name'>{found['name']}</div><div class='cc-info'>👨‍🏫 {found['tea']}</div><div class='cc-time'>⏰ {found['time']}</div><div class='cc-duration'>⏳ {found['dur']}분</div></div>""", unsafe_allow_html=True)
+                                            
+                                            # [핵심] 보강반 오렌지색 스타일 적용
+                                            if found['type'] == '보강':
+                                                card_style = "background-color: #FFF3E0; border-left-color: #FF9800;"
+                                                badge = f"<div style='background-color:#FF9800; color:white; padding:2px 4px; border-radius:4px; font-size:0.65rem; display:inline-block; margin-bottom:3px;'>보강: {found['reason']}</div>"
+                                            else:
+                                                card_style = "background-color: #E8F5E9; border-left-color: #43A047;" # 강의실 기본은 초록색 유지
+                                                badge = ""
+
+                                            st.markdown(f"""<div class='class-card' style='{card_style}'>{badge}<div class='cc-subject'>{found['sub']}</div><div class='cc-name'>{found['name']}</div><div class='cc-info'>👨‍🏫 {found['tea']}</div><div class='cc-time'>⏰ {found['time']}</div><div class='cc-duration'>⏳ {found['dur']}분</div></div>""", unsafe_allow_html=True)
                                             with st.popover(f"👥 {std_count}명", use_container_width=True):
                                                 st.markdown(f"**{found['name']} 수강생 ({std_count}명)**")
                                                 for info in sorted(detail_info): st.markdown(info)
