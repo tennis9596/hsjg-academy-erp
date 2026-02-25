@@ -348,19 +348,14 @@ with st.sidebar:
             "6. 출석 관리", 
             "7. 강사별 시간표", 
             "8. 강의실별 시간표", 
-            "9. 학생 개인별 종합"
+            "9. 학생 개인별 종합",
+            "📝 일일 업무 일지",
+            "👀 업무 일지 관리"   # <--- 원장님 전용 피드백 메뉴 추가!
         ], 
         icons=[
-            'house',            # 대시보드
-            'person-video3',    # 1. 강사
-            'backpack',         # 2. 학생
-            'easel',            # 3. 반
-            'journal-check',    # 4. 수강
-            'qr-code-scan',     # 5. QR 키오스크
-            'calendar-check',   # 6. 출석 체크
-            'clock',            # 7. 강사 시간표
-            'building',         # 8. 강의실 시간표
-            'card-checklist'    # 9. 학생 종합
+            'house', 'person-video3', 'backpack', 'easel', 'journal-check', 
+            'qr-code-scan', 'calendar-check', 'clock', 'building', 'card-checklist', 
+            'pencil-square', 'search'  # <--- 돋보기(search) 아이콘 추가
         ],
         menu_icon="cast", default_index=0,
         styles={
@@ -384,6 +379,7 @@ with st.sidebar:
     st.markdown("---")
     st.caption("Developed by 형설지공 2026")
 
+# (이 바로 아래에 # 🏠 대시보드 (메인 화면) 이 이어지면 정상입니다!)
 # ==========================================
 # 🏠 대시보드 (메인 화면)
 # ==========================================
@@ -1499,3 +1495,275 @@ elif menu == "9. 학생 개인별 종합":
                 c1.metric("이달의 출석", f"{all_statuses.count('출석')}회")
                 c2.metric("지각", f"{all_statuses.count('지각')}회")
                 c3.metric("결석", f"{all_statuses.count('결석')}회")
+
+# ==========================================
+# 📝 일일 업무 일지 (강사용 입력 화면)
+# ==========================================
+elif menu == "📝 일일 업무 일지":
+    st.subheader("📝 일일 업무 일지 작성 및 피드백 확인")
+    st.markdown("오늘 진행한 수업 내용과 학생 개별 특이사항을 기록해 주세요. (입력된 내용은 월간 리포트에 자동 연동됩니다.)")
+    
+    # 기초 데이터 불러오기 (선택지에 넣을 이름들)
+    df_t = load_data('teachers')
+    df_c = load_data('classes')
+    df_s = load_data('students')
+    
+    teacher_names = df_t.iloc[:, 0].tolist() if not df_t.empty else ["등록된 강사 없음"]
+    class_names = df_c.iloc[:, 0].tolist() if not df_c.empty else ["등록된 반 없음"]
+    student_names = df_s.iloc[:, 0].tolist() if not df_s.empty else ["등록된 학생 없음"]
+    
+    # 화면을 세 개의 탭으로 분리
+    tab1, tab2, tab3 = st.tabs(["📚 반별 수업 일지 작성", "🧑‍🎓 학생 개별 기록 작성", "💬 원장님 피드백 확인"])
+    
+    # ---------------------------------------------------------
+    # 탭 1: 반별 수업 일지 작성 폼
+    # ---------------------------------------------------------
+    with tab1:
+        with st.form("class_log_form", clear_on_submit=True):
+            st.markdown("##### 📚 오늘 수업하신 반의 진도와 숙제를 입력하세요.")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                log_date = st.date_input("날짜", datetime.today().date(), key="cl_date")
+            with col2:
+                log_teacher = st.selectbox("담당 강사", teacher_names, key="cl_teacher")
+            with col3:
+                log_class = st.selectbox("대상 반", class_names, key="cl_class")
+            
+            log_book = st.text_input("사용 교재 (예: 개념원리 수학상 50p~65p)")
+            log_progress = st.text_area("수업 진도 및 내용 (최대한 상세히 적어주세요)", height=100)
+            log_homework = st.text_input("부과된 숙제 (없으면 '없음'으로 기재)")
+            
+            submit_class_log = st.form_submit_button("반별 일지 저장하기", use_container_width=True)
+            
+            if submit_class_log:
+                if log_teacher == "등록된 강사 없음" or log_class == "등록된 반 없음":
+                    st.error("강사 및 반 정보가 먼저 등록되어 있어야 합니다.")
+                elif not log_progress:
+                    st.warning("수업 진도 및 내용을 입력해 주세요.")
+                else:
+                    new_class_data = {
+                        '날짜': str(log_date),
+                        '강사명': log_teacher,
+                        '대상반': log_class,
+                        '사용교재': log_book,
+                        '수업진도': log_progress,
+                        '부과된숙제': log_homework
+                    }
+                    add_data('class_logs', new_class_data)
+                    st.success(f"✅ [{log_class}] 반의 수업 일지가 구글 시트에 안전하게 저장되었습니다!")
+
+    # ---------------------------------------------------------
+    # 탭 2: 학생 개별 기록 작성 폼 (상담, 특이사항 등)
+    # ---------------------------------------------------------
+    with tab2:
+        with st.form("student_record_form", clear_on_submit=True):
+            st.markdown("##### 🧑‍🎓 특정 학생의 테스트 결과나 상담, 특이사항을 기록하세요.")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                sr_date = st.date_input("날짜", datetime.today().date(), key="sr_date")
+            with col2:
+                sr_teacher = st.selectbox("작성 강사", teacher_names, key="sr_teacher")
+            with col3:
+                sr_student = st.selectbox("대상 학생", student_names, key="sr_student")
+            
+            col_cat, col_score = st.columns([1, 1])
+            with col_cat:
+                sr_category = st.selectbox("기록 분류", ["테스트 결과", "학생 상담", "학부모 상담", "특이사항 (태도 등)"])
+            with col_score:
+                sr_score = st.text_input("테스트 점수 (테스트 결과인 경우에만 숫자 입력)")
+                
+            sr_details = st.text_area("세부 내용 (상담 내용, 특이사항, 테스트 범위 등)", height=150)
+            
+            submit_sr = st.form_submit_button("학생 개별 기록 저장하기", use_container_width=True)
+            
+            if submit_sr:
+                if sr_teacher == "등록된 강사 없음" or sr_student == "등록된 학생 없음":
+                    st.error("강사 및 학생 정보가 먼저 등록되어 있어야 합니다.")
+                elif not sr_details:
+                    st.warning("세부 내용을 상세히 입력해 주세요.")
+                else:
+                    score_val = sr_score if sr_score.strip() else ""
+                    new_sr_data = {
+                        '날짜': str(sr_date),
+                        '강사명': sr_teacher,
+                        '학생명': sr_student,
+                        '분류': sr_category,
+                        '세부내용': sr_details,
+                        '점수': score_val
+                    }
+                    add_data('student_records', new_sr_data)
+                    st.success(f"✅ [{sr_student}] 학생의 [{sr_category}] 기록이 성공적으로 저장되었습니다!")
+
+    # ---------------------------------------------------------
+    # 탭 3: 내 일지 피드백 확인 (본문 내용 함께 표시되도록 개선)
+    # ---------------------------------------------------------
+    with tab3:
+        st.markdown("##### 💬 원장님(관리자)이 남겨주신 피드백을 확인하세요.")
+        search_teacher = st.selectbox("본인 이름 선택 (강사명)", teacher_names, key="search_fb_teacher")
+        
+        if search_teacher != "등록된 강사 없음":
+            df_cl = load_data('class_logs')
+            df_sr = load_data('student_records')
+            
+            st.divider()
+            st.markdown(f"**💡 [{search_teacher}] 강사님의 최근 피드백 내역**")
+            
+            has_feedback = False
+            
+            # 1) 반별 수업 일지 피드백 렌더링
+            if not df_cl.empty and '관리자코멘트' in df_cl.columns:
+                my_cl_fb = df_cl[(df_cl['강사명'].astype(str) == search_teacher) & (df_cl['관리자코멘트'].astype(str).str.strip() != '')]
+                if not my_cl_fb.empty:
+                    st.markdown("---")
+                    st.markdown("###### 📚 반별 수업 일지 피드백")
+                    # 최근 10개까지 역순으로 표시
+                    for _, row in my_cl_fb.tail(10)[::-1].iterrows():
+                        has_feedback = True
+                        with st.expander(f"📅 {row['날짜']} | [{row['대상반']}] 수업 일지", expanded=True):
+                            st.markdown(f"**📖 사용 교재:** {row.get('사용교재', '')}")
+                            st.markdown(f"**🏃 수업 진도 및 내용:**\n{row.get('수업진도', '')}")
+                            st.markdown(f"**📝 숙제:** {row.get('부과된숙제', '')}")
+                            st.info(f"💬 **원장님 코멘트:**\n{row['관리자코멘트']}")
+                        
+            # 2) 학생 개별 기록 피드백 렌더링
+            if not df_sr.empty and '관리자코멘트' in df_sr.columns:
+                my_sr_fb = df_sr[(df_sr['강사명'].astype(str) == search_teacher) & (df_sr['관리자코멘트'].astype(str).str.strip() != '')]
+                if not my_sr_fb.empty:
+                    st.markdown("---")
+                    st.markdown("###### 🧑‍🎓 학생 개별 기록 피드백")
+                    # 최근 10개까지 역순으로 표시
+                    for _, row in my_sr_fb.tail(10)[::-1].iterrows():
+                        has_feedback = True
+                        score_str = f" (점수: {row.get('점수', '')})" if str(row.get('점수', '')).strip() else ""
+                        with st.expander(f"📅 {row['날짜']} | [{row['학생명']}] 학생 - {row.get('분류', '')}{score_str}", expanded=True):
+                            st.markdown(f"**📋 강사 작성 내용:**\n{row.get('세부내용', '')}")
+                            st.success(f"💬 **원장님 코멘트:**\n{row['관리자코멘트']}")
+                        
+            if not has_feedback:
+                st.caption("아직 도착한 피드백이 없습니다. 오늘도 수업하시느라 고생 많으셨습니다! 😊")
+
+# ==========================================
+# 👀 업무 일지 관리 (원장님 피드백 화면)
+# ==========================================
+elif menu == "👀 업무 일지 관리":
+    st.subheader("👀 업무 일지 열람 및 관리자 피드백")
+    st.markdown("강사님들이 작성한 일지를 확인하고, 피드백이나 격려의 코멘트를 남겨주세요.")
+    
+    df_cl = load_data('class_logs')
+    df_sr = load_data('student_records')
+    df_t = load_data('teachers')
+    
+    teacher_names = df_t.iloc[:, 0].tolist() if not df_t.empty else []
+    
+    # 1. 날짜 및 강사 필터 선택 (나란히 배치)
+    col_d, col_t = st.columns([1, 2])
+    with col_d:
+        selected_date = st.date_input("🗓️ 조회 날짜 선택", datetime.today().date(), key="fb_date")
+        target_date_str = str(selected_date)
+    with col_t:
+        # [핵심] 여러 명의 강사를 선택할 수 있는 필터 (아무것도 안 고르면 전체 표시)
+        selected_teachers = st.multiselect("👨‍🏫 강사 필터 (비워두면 전체 강사 조회)", teacher_names, default=[])
+    
+    # 코멘트 저장을 위한 맞춤형 내부 함수
+    def update_feedback(sheet_name, r_date, r_teacher, r_target_col, r_target_val, new_comment):
+        try:
+            client = init_connection()
+            ws = safe_api_call(client.open("Academy_DB").worksheet, sheet_name)
+            data = safe_api_call(ws.get_all_records)
+            df = pd.DataFrame(data)
+            headers = safe_api_call(ws.row_values, 1)
+            
+            if '관리자코멘트' not in headers:
+                safe_api_call(ws.update_cell, 1, len(headers)+1, '관리자코멘트')
+                headers.append('관리자코멘트')
+                
+            match = df[(df['날짜'].astype(str) == str(r_date)) & 
+                       (df['강사명'].astype(str) == str(r_teacher)) & 
+                       (df[r_target_col].astype(str) == str(r_target_val))]
+            
+            if not match.empty:
+                row_idx = int(match.index[0]) + 2
+                col_idx = headers.index('관리자코멘트') + 1
+                safe_api_call(ws.update_cell, row_idx, col_idx, str(new_comment))
+                clear_cache()
+                return True
+            return False
+        except Exception as e:
+            st.error(f"코멘트 저장 실패: {e}")
+            return False
+
+    tab1, tab2 = st.tabs(["📚 반별 수업 일지 피드백", "🧑‍🎓 학생 개별 기록 피드백"])
+    
+    # ---------------------------------------------------------
+    # 탭 1: 반별 수업 일지 열람 및 피드백
+    # ---------------------------------------------------------
+    with tab1:
+        if df_cl.empty:
+            st.info("작성된 수업 일지가 없습니다.")
+        else:
+            daily_cl = df_cl[df_cl['날짜'].astype(str) == target_date_str]
+            
+            # [핵심] 선택한 강사만 필터링
+            if selected_teachers:
+                daily_cl = daily_cl[daily_cl['강사명'].isin(selected_teachers)]
+                
+            if daily_cl.empty:
+                st.info(f"해당 조건으로 작성된 수업 일지가 없습니다.")
+            else:
+                for idx, row in daily_cl.iterrows():
+                    c_teacher = row.get('강사명', '')
+                    c_class = row.get('대상반', '')
+                    c_book = row.get('사용교재', '')
+                    c_prog = row.get('수업진도', '')
+                    c_hw = row.get('부과된숙제', '')
+                    c_comment = row.get('관리자코멘트', '') if '관리자코멘트' in row else ''
+                    
+                    with st.expander(f"👨‍🏫 {c_teacher} 강사님 - [{c_class}] 수업 일지", expanded=True):
+                        col_info, col_fb = st.columns([1.5, 1])
+                        with col_info:
+                            st.markdown(f"**📖 사용 교재:** {c_book}")
+                            st.markdown(f"**🏃 수업 진도 및 내용:**\n{c_prog}")
+                            st.markdown(f"**📝 숙제:** {c_hw}")
+                        with col_fb:
+                            new_fb = st.text_area("💬 원장님 코멘트 남기기", value=c_comment, key=f"fb_cl_{idx}", height=120)
+                            if st.button("💾 코멘트 저장", key=f"btn_cl_{idx}", type="primary", use_container_width=True):
+                                if update_feedback('class_logs', target_date_str, c_teacher, '대상반', c_class, new_fb):
+                                    show_center_message("✅ 코멘트가 저장되었습니다!")
+                                    time.sleep(1); st.rerun()
+    
+    # ---------------------------------------------------------
+    # 탭 2: 학생 개별 기록 열람 및 피드백
+    # ---------------------------------------------------------
+    with tab2:
+        if df_sr.empty:
+            st.info("작성된 학생 개별 기록이 없습니다.")
+        else:
+            daily_sr = df_sr[df_sr['날짜'].astype(str) == target_date_str]
+            
+            # [핵심] 선택한 강사만 필터링
+            if selected_teachers:
+                daily_sr = daily_sr[daily_sr['강사명'].isin(selected_teachers)]
+                
+            if daily_sr.empty:
+                st.info(f"해당 조건으로 작성된 학생 개별 기록이 없습니다.")
+            else:
+                for idx, row in daily_sr.iterrows():
+                    s_teacher = row.get('강사명', '')
+                    s_student = row.get('학생명', '')
+                    s_cat = row.get('분류', '')
+                    s_detail = row.get('세부내용', '')
+                    s_score = row.get('점수', '')
+                    s_comment = row.get('관리자코멘트', '') if '관리자코멘트' in row else ''
+                    
+                    score_str = f" (점수: {s_score}점)" if str(s_score).strip() else ""
+                    
+                    with st.expander(f"🧑‍🎓 {s_student} 학생 - {s_cat}{score_str} / 작성자: {s_teacher} 강사", expanded=True):
+                        col_info, col_fb = st.columns([1.5, 1])
+                        with col_info:
+                            st.markdown(f"**📋 세부 내용:**\n{s_detail}")
+                        with col_fb:
+                            new_fb = st.text_area("💬 원장님 코멘트 남기기", value=s_comment, key=f"fb_sr_{idx}", height=120)
+                            if st.button("💾 코멘트 저장", key=f"btn_sr_{idx}", type="primary", use_container_width=True):
+                                if update_feedback('student_records', target_date_str, s_teacher, '학생명', s_student, new_fb):
+                                    show_center_message("✅ 코멘트가 저장되었습니다!")
+                                    time.sleep(1); st.rerun()
