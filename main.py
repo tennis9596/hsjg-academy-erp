@@ -504,11 +504,13 @@ if menu == "🏠 대시보드":
                                 enrolled_students.append(f"{sn}({s_grade})" if s_grade else sn)
                                 expected_attendances.append((sn, c_name, c_teacher, start_t, s_phone, p_phone))
                                 
-                        target_classes.append({
-                            'time': t_range, 'start_t': start_t, 'name': c_name,
-                            'teacher': c_teacher, 'room': row.iloc[3] if len(row) > 3 else "기타",
-                            'students': enrolled_students, 'type': c_type, 'reason': row.get('사유', '')
-                        })
+                        # [핵심 변경 1] 학생이 1명이라도 배정된 반(enrolled_students가 비어있지 않은 경우)만 추가!
+                        if enrolled_students:
+                            target_classes.append({
+                                'time': t_range, 'start_t': start_t, 'name': c_name,
+                                'teacher': c_teacher, 'room': row.iloc[3] if len(row) > 3 else "기타",
+                                'students': enrolled_students, 'type': c_type, 'reason': row.get('사유', '')
+                            })
 
     # 2. 출결 분석 및 미등원 자동 결석 처리 로직
     now = datetime.now()
@@ -528,7 +530,6 @@ if menu == "🏠 대시보드":
     for sn, cname, c_tea, st_time, sph, pph in expected_attendances:
         if (sn, cname) in att_map:
             status = att_map[(sn, cname)]
-            # [수정] 지각/결석 리스트에 담당 강사(c_tea)도 함께 저장하도록 변경!
             if status == '지각': late_list.append((sn, cname, c_tea, st_time, sph))
             elif status == '결석': absent_list.append((sn, cname, c_tea, st_time, sph))
         else:
@@ -546,10 +547,21 @@ if menu == "🏠 대시보드":
         add_data_bulk('attendance', auto_absent_to_db)
         st.rerun() 
 
+    # [핵심 변경 2] 문자열 시간(예: "17:00")을 분(minute)으로 변환하여 완벽하게 최신순 정렬
+    def time_to_min_for_sort(t_str):
+        try:
+            h, m = map(int, t_str.split(':'))
+            return h * 60 + m
+        except: return 0
+        
+    action_required.sort(key=lambda x: time_to_min_for_sort(x[3]), reverse=True)
+    late_list.sort(key=lambda x: time_to_min_for_sort(x[3]), reverse=True)
+    absent_list.sort(key=lambda x: time_to_min_for_sort(x[3]), reverse=True)
+
     # 3. 메트릭 현황판
     c1, c2, c3, c4 = st.columns(4)
     with c1: st.markdown(f"""<div class="metric-card"><div class="metric-title">총 재원생</div><div class="metric-value">{len(df_s)}명</div></div>""", unsafe_allow_html=True)
-    with c2: st.markdown(f"""<div class="metric-card"><div class="metric-title">오늘 개설된 반</div><div class="metric-value">{len(target_classes)}개</div></div>""", unsafe_allow_html=True)
+    with c2: st.markdown(f"""<div class="metric-card"><div class="metric-title">오늘 활성된 반</div><div class="metric-value">{len(target_classes)}개</div></div>""", unsafe_allow_html=True)
     with c3: 
         att_count = len([k for k, v in att_map.items() if v in ['출석', '지각', '보강/자습']])
         st.markdown(f"""<div class="metric-card"><div class="metric-title">오늘 등원 완료</div><div class="metric-value">{att_count}명</div></div>""", unsafe_allow_html=True)
@@ -586,11 +598,10 @@ if menu == "🏠 대시보드":
         if not late_list and not absent_list:
             st.info("오늘 발생한 지각/결석 확정 내역이 없습니다.")
         else:
-            # [수정] 강사 이름(c_tea)이 함께 출력되도록 포맷 변경!
             for sn, cname, c_tea, tm, sph in late_list:
-                st.warning(f"**[지각]** {sn} | {cname} (담당: {c_tea}) | 폰: {sph[-4:] if len(sph)>=4 else ''}")
+                st.warning(f"**[지각]** {sn} | {cname} (담당: {c_tea}) | 시작: {tm}")
             for sn, cname, c_tea, tm, sph in absent_list:
-                st.error(f"**[결석]** {sn} | {cname} (담당: {c_tea}) | 폰: {sph[-4:] if len(sph)>=4 else ''}")
+                st.error(f"**[결석]** {sn} | {cname} (담당: {c_tea}) | 시작: {tm}")
 
     st.divider()
     
