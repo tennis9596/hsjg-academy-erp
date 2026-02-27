@@ -775,23 +775,86 @@ elif menu == "2. 학생 관리":
     df_c, df_t, df_s = load_data('classes'), load_data('teachers'), load_data('students')
     all_subjects = sorted(get_col_data(df_t, '과목', 1).unique().tolist()) if not df_t.empty else []
 
-    # --- 첫 번째 탭: 학생 조회 (상태 필터 추가) ---
+    # --- 첫 번째 탭: 학생 조회 및 상세 메모장 ---
     with t1:
         if not df_s.empty:
             # 상태 열이 없으면 기본값 '재원'으로 채우기
             display_df = df_s.copy()
-            if '상태' not in display_df.columns:
-                display_df['상태'] = '재원'
-            else:
-                display_df['상태'] = display_df['상태'].fillna('재원')
+            if '상태' not in display_df.columns: display_df['상태'] = '재원'
+            else: display_df['상태'] = display_df['상태'].fillna('재원')
                 
-            # [수정] 필터에 '졸업' 항목 추가!
             status_filter = st.radio("상태 필터", ["재원", "휴원", "퇴원", "졸업", "전체보기"], horizontal=True)
             
             if status_filter != "전체보기":
                 display_df = display_df[display_df['상태'] == status_filter]
                 
+            # 1. 상단: 요약된 전체 학생 목록
             st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            st.divider()
+            
+            # 2. 하단: 특정 학생 클릭(선택) 시 나타나는 상세 메모장
+            st.markdown("### 📝 학생 상세 프로필 (타임라인 메모장)")
+            
+            df_s['L'] = df_s.iloc[:,0] + " (" + df_s.iloc[:,3] + ", " + df_s['상태'] + ")"
+            s_ops = ["(학생을 선택하세요)"] + df_s['L'].tolist()
+            selected_memo_student = st.selectbox("🔍 상세 조회할 학생 선택", s_ops)
+            
+            if selected_memo_student != "(학생을 선택하세요)":
+                real_n = selected_memo_student.split(' (')[0]
+                s_row = df_s[df_s.iloc[:,0] == real_n].iloc[0]
+                
+                # 데이터 불러오기
+                df_e = load_data('enrollments')
+                df_sr = load_data('student_records')
+                
+                with st.container(border=True):
+                    # 기본 정보 헤더
+                    st.markdown(f"#### 🧑‍🎓 {real_n} 학생 종합 기록부")
+                    c1, c2, c3 = st.columns(3)
+                    c1.caption(f"**상태:** {s_row.get('상태', '재원')}")
+                    c2.caption(f"**학교/학년:** {s_row.get('학교', '')} ({s_row.get('학년', '')})")
+                    c3.caption(f"**최초 등록일:** {s_row.get('등록일', '기록없음')}")
+                    
+                    st.markdown("---")
+                    
+                    # 수강 이력 (타임라인)
+                    st.markdown("##### 📘 수강 이력")
+                    if not df_e.empty:
+                        my_enrolls = df_e[df_e['학생'] == real_n]
+                        if my_enrolls.empty:
+                            st.info("수강 이력이 없습니다.")
+                        else:
+                            for _, e_row in my_enrolls.iterrows():
+                                e_subj = e_row.get('과목', '')
+                                e_cls = e_row.get('반이름', '')
+                                e_tea = e_row.get('담당강사', '')
+                                e_start = e_row.get('날짜', '')
+                                e_status = e_row.get('상태', '수강중')
+                                e_end = e_row.get('종료일', '')
+                                
+                                if e_status == "수강종료":
+                                    st.markdown(f"• ⬛ ~~[{e_subj}] {e_cls} ({e_tea})~~ : {e_start} ~ {e_end} (수강종료)")
+                                else:
+                                    st.markdown(f"• 🟦 **[{e_subj}] {e_cls} ({e_tea})** : {e_start} ~ 현재 (수강중)")
+                    else:
+                        st.info("수강 이력이 없습니다.")
+                        
+                    st.markdown("---")
+                    
+                    # 상담 및 특이사항 기록 (Menu 10에서 작성한 내용 연동)
+                    st.markdown("##### 💬 상담 및 특이사항 (최근 5건)")
+                    if not df_sr.empty:
+                        my_records = df_sr[df_sr['학생명'] == real_n]
+                        if my_records.empty:
+                            st.info("기록된 상담이나 특이사항이 없습니다.")
+                        else:
+                            for _, r_row in my_records.tail(5)[::-1].iterrows():
+                                st.markdown(f"**[{r_row['날짜']}] {r_row['분류']}** (작성: {r_row['강사명']})")
+                                st.caption(f"{r_row['세부내용']}")
+                    else:
+                        st.info("기록된 상담이나 특이사항이 없습니다.")
+                        
         else:
             st.info("등록된 학생이 없습니다.")
 
@@ -1152,7 +1215,7 @@ elif menu == "3. 반 관리":
                         st.rerun()
 
 # ==========================================
-# 4. 수강 배정
+# 4. 수강 배정 (수강종료 타임라인 보존 기능 적용)
 # ==========================================
 elif menu == "4. 수강 배정":
     st.subheader("🔗 수강 배정 관리")
@@ -1166,11 +1229,42 @@ elif menu == "4. 수강 배정":
     if 'confirm_save_cart' not in st.session_state: st.session_state.confirm_save_cart = False
     if 'confirm_cancel_target' not in st.session_state: st.session_state.confirm_cancel_target = None
 
+    # [핵심 내부 함수] 지우개 대신 빨간펜(수강종료)을 칠하는 함수
+    def cancel_class_soft(student_name, class_name):
+        try:
+            client = init_connection()
+            ws = safe_api_call(client.open("Academy_DB").worksheet, 'enrollments')
+            data = safe_api_call(ws.get_all_records)
+            headers = safe_api_call(ws.row_values, 1)
+            
+            if '상태' not in headers:
+                safe_api_call(ws.update_cell, 1, len(headers)+1, '상태')
+                headers.append('상태')
+            if '종료일' not in headers:
+                safe_api_call(ws.update_cell, 1, len(headers)+1, '종료일')
+                headers.append('종료일')
+                
+            for i, row in enumerate(data):
+                if str(row.get('학생')) == str(student_name) and str(row.get('반이름')) == str(class_name) and str(row.get('상태')) != '수강종료':
+                    status_col = headers.index('상태') + 1
+                    end_date_col = headers.index('종료일') + 1
+                    safe_api_call(ws.update_cell, i+2, status_col, '수강종료')
+                    safe_api_call(ws.update_cell, i+2, end_date_col, str(datetime.today().date()))
+            clear_cache()
+            return True
+        except Exception as e:
+            st.error(f"수강 종료 처리 실패: {e}")
+            return False
+
     tab1, tab2 = st.tabs(["📋 전체 수강 현황", "➕ 수강 신청 (장바구니)"])
 
     with tab1:
         if df_e.empty: st.info("현재 배정된 수강 내역이 없습니다.")
-        else: st.dataframe(df_e[['학생', '과목', '반이름', '담당강사', '날짜']], use_container_width=True)
+        else: 
+            # '수강종료'가 아닌 현재 '수강중'인 목록만 보여줌
+            if '상태' not in df_e.columns: df_e['상태'] = '수강중'
+            active_e = df_e[df_e['상태'] != '수강종료']
+            st.dataframe(active_e[['학생', '과목', '반이름', '담당강사', '날짜']], use_container_width=True)
 
     with tab2:
         if df_s.empty or df_t.empty or df_c.empty:
@@ -1212,14 +1306,16 @@ elif menu == "4. 수강 배정":
                                                 if item['학생'] == real_name and item['반이름'] == real_cls_name and item['과목'] == sel_subj: is_exist = True
                                             if not df_e.empty:
                                                 try:
-                                                    already = df_e[(df_e.iloc[:,0]==real_name) & (df_e.iloc[:,1]==sel_subj) & (df_e.iloc[:,2]==real_cls_name)]
+                                                    # 이미 수강중인지 확인 (수강종료된 반은 다시 담을 수 있음)
+                                                    already = df_e[(df_e.iloc[:,0]==real_name) & (df_e.iloc[:,1]==sel_subj) & (df_e.iloc[:,2]==real_cls_name) & (df_e.get('상태', '') != '수강종료')]
                                                     if not already.empty: is_exist = True
                                                 except: pass
                                             if is_exist: st.warning("이미 담겼거나 수강 중인 수업입니다.")
                                             else:
                                                 st.session_state.draft_enrolls.append({
                                                     '학생': real_name, '과목': sel_subj, '반이름': real_cls_name,
-                                                    '담당강사': sel_tea, '날짜': str(datetime.today().date())
+                                                    '담당강사': sel_tea, '날짜': str(datetime.today().date()),
+                                                    '상태': '수강중', '종료일': '' # 새로운 데이터 등록 시 기본값
                                                 })
                                                 st.rerun()
 
@@ -1258,25 +1354,30 @@ elif menu == "4. 수강 배정":
                     real_name_curr = sel_student_label.split(' (')[0]
                     if not df_e.empty:
                         try:
-                            curr_list = df_e[df_e.iloc[:,0] == real_name_curr]
+                            # 현재 수강중인(수강종료가 아닌) 수업만 표시
+                            if '상태' not in df_e.columns: df_e['상태'] = '수강중'
+                            curr_list = df_e[(df_e.iloc[:,0] == real_name_curr) & (df_e['상태'] != '수강종료')]
+                            
                             if not curr_list.empty:
                                 for idx, row in curr_list.iterrows():
                                     subj_val, cls_val, tea_val = row.iloc[1], row.iloc[2], row.iloc[3]
                                     unique_key = f"{real_name_curr}_{cls_val}_{subj_val}"
-                                    c1, c2 = st.columns([4, 1])
+                                    c1, c2 = st.columns([4, 1.2])
                                     c1.markdown(f"• :blue[[{subj_val}]] {cls_val} (담당: {tea_val})")
+                                    
                                     if st.session_state.confirm_cancel_target != unique_key:
-                                        if c2.button("취소", key=f"btn_cancel_{unique_key}"):
+                                        if c2.button("수강종료", key=f"btn_cancel_{unique_key}"):
                                             st.session_state.confirm_cancel_target = unique_key
                                             st.rerun()
                                     else:
                                         with c2:
-                                            st.markdown("**:red[삭제?]**")
+                                            st.markdown("**:red[종료확인?]**")
                                             y_col, n_col = st.columns(2)
                                             if y_col.button("네", key=f"yes_{unique_key}"):
-                                                delete_data_all('enrollments', {'학생': real_name_curr, '반이름': cls_val})
+                                                # [핵심] 완전 삭제(delete) 대신 상태 변경(cancel_class_soft) 실행
+                                                cancel_class_soft(real_name_curr, cls_val)
                                                 st.session_state.confirm_cancel_target = None
-                                                show_center_message("수강 취소 완료!")
+                                                show_center_message("수강 종료 처리 완료!")
                                                 time.sleep(1); st.rerun()
                                             if n_col.button("아니오", key=f"no_{unique_key}"):
                                                 st.session_state.confirm_cancel_target = None
