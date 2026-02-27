@@ -766,18 +766,35 @@ elif menu == "1. 강사 관리":
                         st.rerun()
 
 # ==========================================
-# 2. 학생 관리
+# 2. 학생 관리 (재원/퇴원 상태 관리 적용)
 # ==========================================
 elif menu == "2. 학생 관리":
     st.subheader("📝 학생 관리")
-    t1, t2, t3, t4 = st.tabs(["📋 전체 학생 조회", "➕ 신규 등록", "🔧 수정/삭제", "📱 QR 발급/인쇄"])
+    t1, t2, t3, t4 = st.tabs(["📋 전체 학생 조회", "➕ 신규 등록", "🔧 수정/상태변경", "📱 QR 발급/인쇄"])
     
     df_c, df_t, df_s = load_data('classes'), load_data('teachers'), load_data('students')
     all_subjects = sorted(get_col_data(df_t, '과목', 1).unique().tolist()) if not df_t.empty else []
 
+    # --- 첫 번째 탭: 학생 조회 (상태 필터 추가) ---
     with t1:
-        st.dataframe(df_s, use_container_width=True)
+        if not df_s.empty:
+            # 상태 열이 없으면 기본값 '재원'으로 채우기
+            display_df = df_s.copy()
+            if '상태' not in display_df.columns:
+                display_df['상태'] = '재원'
+            else:
+                display_df['상태'] = display_df['상태'].fillna('재원')
+                
+            status_filter = st.radio("상태 필터", ["재원", "휴원", "퇴원", "전체보기"], horizontal=True)
+            
+            if status_filter != "전체보기":
+                display_df = display_df[display_df['상태'] == status_filter]
+                
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("등록된 학생이 없습니다.")
 
+    # --- 두 번째 탭: 신규 등록 (상태 추가) ---
     with t2:
         if df_c.empty: st.warning("⚠️ 개설된 반이 없습니다. (반 관리 메뉴에서 먼저 반을 만들어주세요)")
         st.markdown("##### 1️⃣ 기본 정보 입력")
@@ -785,8 +802,10 @@ elif menu == "2. 학생 관리":
         name = c1.text_input("이름", key="create_name")
         phone = c1.text_input("학생 폰", key="create_phone")
         p_phone = c1.text_input("부모님 폰", key="create_p_phone")
+        
         grade = c2.selectbox("학년", ["초4","초5","초6","중1","중2","중3","고1","고2","고3"], key="create_grade")
         school = c2.text_input("학교", key="create_school")
+        new_status = c2.selectbox("현재 상태", ["재원", "휴원", "퇴원"], key="create_status") # 상태 추가
         
         st.divider()
         st.markdown("##### 2️⃣ 수강 과목 및 반 선택")
@@ -822,13 +841,14 @@ elif menu == "2. 학생 관리":
             if not name:
                 st.error("이름을 입력해주세요.")
             else:
-                nd = {'이름': name, '연락처': phone, '학부모연락처': p_phone, '학년': grade, '학교': school}
+                # 데이터베이스에 상태 필드 함께 저장
+                nd = {'이름': name, '연락처': phone, '학부모연락처': p_phone, '학년': grade, '학교': school, '상태': new_status}
                 add_data('students', nd)
                 if final_enroll_list: add_data_bulk('enrollments', final_enroll_list)
                 show_center_message(f"✅ {name} 등록 완료!")
                 
                 # 입력창 초기화
-                keys_to_clear = ["create_name", "create_phone", "create_p_phone", "create_grade", "create_school"]
+                keys_to_clear = ["create_name", "create_phone", "create_p_phone", "create_grade", "create_school", "create_status"]
                 for subj in all_subjects:
                     keys_to_clear.append(f"new_chk_{subj}")
                     keys_to_clear.append(f"new_tea_{subj}")
@@ -837,6 +857,7 @@ elif menu == "2. 학생 관리":
                     if key in st.session_state: del st.session_state[key]
                 time.sleep(1.5); st.rerun()
 
+    # --- 세 번째 탭: 수정 및 삭제 (상태 변경 중심) ---
     with t3:
         if not df_s.empty:
             st.markdown("### 🔍 학생 검색 및 수정")
@@ -850,7 +871,7 @@ elif menu == "2. 학생 관리":
                 real_n = s_sel.split(' (')[0]
                 row = df_s[df_s.iloc[:,0] == real_n].iloc[0]
                 st.divider()
-                st.markdown(f"##### 🔧 '{real_n}' 학생 정보 수정")
+                st.markdown(f"##### 🔧 '{real_n}' 학생 정보 및 상태 수정")
                 sc1, sc2 = st.columns(2)
                 u_nm = sc1.text_input("이름", value=row.iloc[0], key=f"u_sn_{real_n}")
                 u_hp = sc1.text_input("학생 폰", value=row.iloc[1], key=f"u_sp_{real_n}")
@@ -859,16 +880,21 @@ elif menu == "2. 학생 관리":
                 cur_g = row.iloc[3]
                 u_gr = sc2.selectbox("학년", grs, index=grs.index(cur_g) if cur_g in grs else 0, key=f"u_sg_{real_n}")
                 u_sc = sc2.text_input("학교", value=row.iloc[4], key=f"u_ssc_{real_n}")
+                
+                # 기존 상태값 불러오기
+                cur_stat = str(row.get('상태', '재원'))
+                if cur_stat not in ["재원", "휴원", "퇴원"]: cur_stat = "재원"
+                u_stat = sc2.selectbox("상태 변경 (퇴원 처리)", ["재원", "휴원", "퇴원"], index=["재원", "휴원", "퇴원"].index(cur_stat), key=f"u_stat_{real_n}")
 
-                bc1, bc2 = st.columns(2)
-                if bc1.button("💾 수정 내용 저장"):
+                st.markdown("---")
+                if st.button("💾 정보 및 상태 업데이트", type="primary", use_container_width=True):
                     st.session_state['confirm_action'] = 'update_student'
                 
                 if st.session_state.get('confirm_action') == 'update_student':
                     st.warning(f"⚠️ '{real_n}' 학생의 정보를 수정하시겠습니까?")
                     col_y, col_n = st.columns([1,1])
                     if col_y.button("네, 수정합니다", type="primary"):
-                        nd = {'이름': u_nm, '연락처': u_hp, '학부모연락처': u_pp, '학년': u_gr, '학교': u_sc}
+                        nd = {'이름': u_nm, '연락처': u_hp, '학부모연락처': u_pp, '학년': u_gr, '학교': u_sc, '상태': u_stat}
                         update_data('students', '이름', real_n, nd)
                         st.session_state['confirm_action'] = None
                         show_center_message("수정 완료!")
@@ -878,11 +904,13 @@ elif menu == "2. 학생 관리":
                         st.session_state['confirm_action'] = None
                         st.rerun()
 
-                if bc2.button("🗑️ 학생 삭제 (복구 불가)", type="primary"):
+                st.divider()
+                st.caption("⚠️ 테스트 데이터를 지우거나 실수로 등록한 경우에만 아래 삭제 버튼을 사용하세요. 그만둔 학생은 위에서 상태를 '퇴원'으로 변경하는 것이 안전합니다.")
+                if st.button("🗑️ 학생 데이터 영구 삭제 (복구 불가)"):
                     st.session_state['confirm_action'] = 'delete_student'
 
                 if st.session_state.get('confirm_action') == 'delete_student':
-                    st.error(f"⚠️ 경고: '{real_n}' 학생을 삭제하면 수강 기록까지 모두 사라집니다.")
+                    st.error(f"⚠️ 정말로 '{real_n}' 학생 데이터를 영구 삭제하시겠습니까?")
                     col_y, col_n = st.columns([1,1])
                     if col_y.button("네, 모두 삭제합니다", type="primary"):
                         delete_data_all('students', {'이름': real_n})
@@ -895,6 +923,7 @@ elif menu == "2. 학생 관리":
                         st.session_state['confirm_action'] = None
                         st.rerun()
 
+    # --- 네 번째 탭: QR 발급 (기존과 동일) ---
     with t4:
         st.markdown("### 📱 QR 코드 발급 및 인쇄")
         df = load_data('students')
