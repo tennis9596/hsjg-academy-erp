@@ -14,6 +14,17 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import os
 import calendar
+import os
+import time
+
+# [중요] 시스템 전체 시간을 한국 시간(KST)으로 강제 고정
+# 리눅스 기반인 스트림릿 클라우드 서버에서만 작동하며, 윈도우 로컬에서는 무시됩니다.
+try:
+    os.environ['TZ'] = 'Asia/Seoul'
+    time.tzset()
+except AttributeError:
+    # 윈도우 환경에서는 tzset이 없으므로 에러를 방지합니다.
+    pass
 
 # ==========================================
 # [기본 설정] 페이지 및 스타일
