@@ -766,7 +766,7 @@ elif menu == "1. 강사 관리":
                         st.rerun()
 
 # ==========================================
-# 2. 학생 관리 (재원/퇴원 상태 관리 적용)
+# 2. 학생 관리 (재원/퇴원/휴원/졸업 상태 관리 적용)
 # ==========================================
 elif menu == "2. 학생 관리":
     st.subheader("📝 학생 관리")
@@ -785,7 +785,8 @@ elif menu == "2. 학생 관리":
             else:
                 display_df['상태'] = display_df['상태'].fillna('재원')
                 
-            status_filter = st.radio("상태 필터", ["재원", "휴원", "퇴원", "전체보기"], horizontal=True)
+            # [수정] 필터에 '졸업' 항목 추가!
+            status_filter = st.radio("상태 필터", ["재원", "휴원", "퇴원", "졸업", "전체보기"], horizontal=True)
             
             if status_filter != "전체보기":
                 display_df = display_df[display_df['상태'] == status_filter]
@@ -805,7 +806,8 @@ elif menu == "2. 학생 관리":
         
         grade = c2.selectbox("학년", ["초4","초5","초6","중1","중2","중3","고1","고2","고3"], key="create_grade")
         school = c2.text_input("학교", key="create_school")
-        new_status = c2.selectbox("현재 상태", ["재원", "휴원", "퇴원"], key="create_status") # 상태 추가
+        # [수정] 선택지에 '졸업' 항목 추가!
+        new_status = c2.selectbox("현재 상태", ["재원", "휴원", "퇴원", "졸업"], key="create_status") 
         
         st.divider()
         st.markdown("##### 2️⃣ 수강 과목 및 반 선택")
@@ -881,10 +883,10 @@ elif menu == "2. 학생 관리":
                 u_gr = sc2.selectbox("학년", grs, index=grs.index(cur_g) if cur_g in grs else 0, key=f"u_sg_{real_n}")
                 u_sc = sc2.text_input("학교", value=row.iloc[4], key=f"u_ssc_{real_n}")
                 
-                # 기존 상태값 불러오기
+                # [수정] 기존 상태값 불러오기 및 '졸업' 항목 추가!
                 cur_stat = str(row.get('상태', '재원'))
-                if cur_stat not in ["재원", "휴원", "퇴원"]: cur_stat = "재원"
-                u_stat = sc2.selectbox("상태 변경 (퇴원 처리)", ["재원", "휴원", "퇴원"], index=["재원", "휴원", "퇴원"].index(cur_stat), key=f"u_stat_{real_n}")
+                if cur_stat not in ["재원", "휴원", "퇴원", "졸업"]: cur_stat = "재원"
+                u_stat = sc2.selectbox("상태 변경 (퇴원/졸업 처리)", ["재원", "휴원", "퇴원", "졸업"], index=["재원", "휴원", "퇴원", "졸업"].index(cur_stat), key=f"u_stat_{real_n}")
 
                 st.markdown("---")
                 if st.button("💾 정보 및 상태 업데이트", type="primary", use_container_width=True):
@@ -905,7 +907,7 @@ elif menu == "2. 학생 관리":
                         st.rerun()
 
                 st.divider()
-                st.caption("⚠️ 테스트 데이터를 지우거나 실수로 등록한 경우에만 아래 삭제 버튼을 사용하세요. 그만둔 학생은 위에서 상태를 '퇴원'으로 변경하는 것이 안전합니다.")
+                st.caption("⚠️ 테스트 데이터를 지우거나 실수로 등록한 경우에만 아래 삭제 버튼을 사용하세요. 그만둔 학생은 위에서 상태를 '퇴원'이나 '졸업'으로 변경하는 것이 안전합니다.")
                 if st.button("🗑️ 학생 데이터 영구 삭제 (복구 불가)"):
                     st.session_state['confirm_action'] = 'delete_student'
 
