@@ -1986,11 +1986,13 @@ elif menu == "8. 강의실별 시간표":
                     safe_html = urllib.parse.quote(report_html)
                     
                     # 6. 인쇄 버튼 및 A3 최적화 자바스크립트
+                    # [인쇄 버튼 및 A3 최적화 자바스크립트]
+                    # 스타일 시트에 '종이 한 장 응축' 로직을 강화했습니다.
                     components.html(
                         f'''
                         <div style="text-align: right; padding-right: 10px;">
                             <button onclick="printTimetable()" style="padding: 10px 20px; font-size: 16px; font-weight: bold; background-color: #1565C0; color: white; border: none; border-radius: 5px; cursor: pointer; box-shadow: 0px 2px 5px rgba(0,0,0,0.2);">
-                                🖨️ A3 사이즈 인쇄
+                                🖨️ 인쇄 (A3 한 장에 모두 담기)
                             </button>
                         </div>
                         <script>
@@ -1998,16 +2000,20 @@ elif menu == "8. 강의실별 시간표":
                             var htmlContent = decodeURIComponent("{safe_html}");
                             var printWin = window.open('', '_blank');
                             
-                            printWin.document.write("<html><head><title>종합 시간표</title>");
+                            printWin.document.write("<html><head><title>주간 종합 시간표</title>");
                             printWin.document.write("<style>");
-                            printWin.document.write("body {{ font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; color: black; background: white; }} ");
+                            printWin.document.write("body {{ font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif; color: black; background: white; margin: 0; padding: 0; }} ");
+                            
+                            // [A3 압축 핵심 설정]
                             printWin.document.write("@media print {{ ");
-                            printWin.document.write("  @page {{ size: A3 landscape; margin: 15mm; }} ");
-                            printWin.document.write("  body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }} ");
-                            printWin.document.write("  table {{ page-break-inside: auto; }} ");
-                            printWin.document.write("  tr {{ page-break-inside: avoid; page-break-after: auto; }} ");
-                            printWin.document.write("  thead {{ display: table-header-group; }} ");
+                            printWin.document.write("  @page {{ size: A3 landscape; margin: 10mm; }} "); // 여백 최소화
+                            printWin.document.write("  body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; zoom: 90%; }} "); // 전체 90% 축소로 내용 확보
+                            printWin.document.write("  table {{ width: 100%; border-collapse: collapse; table-layout: fixed; page-break-inside: avoid; }} "); // 테이블 레이아웃 고정
+                            printWin.document.write("  th, td {{ word-break: break-all; overflow: hidden; }} "); // 글자가 넘쳐도 칸을 깨뜨리지 않음
+                            printWin.document.write("  tr {{ page-break-inside: avoid; }} "); // 행 짤림 방지
+                            printWin.document.write("  .class-box {{ padding: 4px !important; margin-bottom: 4px !important; border-width: 1px !important; }} "); // 내부 박스 여백 다이어트
                             printWin.document.write("}}");
+                            
                             printWin.document.write("</style></head><body>");
                             printWin.document.write(htmlContent);
                             printWin.document.write("</body></html>");
@@ -2016,6 +2022,8 @@ elif menu == "8. 강의실별 시간표":
                             
                             setTimeout(function() {{
                                 printWin.print();
+                                // 인쇄 후 자동으로 창을 닫고 싶으시면 아래 주석을 해제하세요.
+                                // printWin.close();
                             }}, 500);
                         }}
                         </script>
