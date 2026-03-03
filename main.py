@@ -1412,11 +1412,35 @@ elif menu == "4. 수강 배정":
                     else: st.caption("현재 수강 중인 수업이 없습니다.")
 
 # ==========================================
-# 5. QR 키오스크(출석) - 이중 스캔(등/하원) 방어 시스템
+# 5. QR 키오스크(출석) - 이중 스캔(등/하원) 방어 시스템 및 UI/UX 강화
 # ==========================================
 elif menu == "5. QR 키오스크(출석)":
+    
+    # [수정 1] CSS 마법: 스트림릿 카메라 버튼을 강제로 거대하게 만듭니다!
+    st.markdown("""
+    <style>
+    /* 카메라 촬영 버튼 짱 크게 만들기 */
+    [data-testid="stCameraInput"] button {
+        min-height: 80px !important;
+        font-size: 24px !important;
+        font-weight: 900 !important;
+        border-radius: 15px !important;
+        background-color: #FF4B4B !important; 
+        color: white !important;
+        border: 2px solid #D32F2F !important;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.2) !important;
+        margin-top: 10px !important;
+    }
+    /* 버튼을 눌렀을 때(호버) 색상 변화 */
+    [data-testid="stCameraInput"] button:hover {
+        background-color: #D32F2F !important;
+        transform: scale(1.02) !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     st.markdown("<h2 style='text-align: center; color: #1565C0;'>📷 스마트 출결 키오스크</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>QR코드를 카메라에 비추고 <b>[사진 찍기]</b>를 눌러주세요.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; font-size: 18px;'>QR코드를 카메라에 비추고 <b>아래의 커다란 [Take Photo] 버튼</b>을 꾹 눌러주세요!</p>", unsafe_allow_html=True)
     
     now = datetime.now()
     st.markdown(f"<h4 style='text-align: center; color: #E65100;'>⏰ 현재 시간: {now.strftime('%Y-%m-%d %H:%M')}</h4>", unsafe_allow_html=True)
@@ -1444,7 +1468,6 @@ elif menu == "5. QR 키오스크(출석)":
                 today_str = days_ko[now.weekday()]
                 td_date = str(now.date())
                 
-                # 1. 학생의 오늘 시간표 추출 (가장 늦게 끝나는 수업 기준)
                 my_classes = []
                 if not df_e.empty:
                     my_classes = df_e[df_e.iloc[:, 0] == student_name].iloc[:, 2].tolist()
@@ -1471,14 +1494,10 @@ elif menu == "5. QR 키오스크(출석)":
                                             c_name = c
                                     except: pass
                 
-                # 오늘 해당 학생의 출석 기록 확인
                 today_records = pd.DataFrame()
                 if not df_a.empty:
                     today_records = df_a[(df_a.iloc[:,0] == td_date) & (df_a.iloc[:,2] == student_name)]
                 
-                # ==========================================
-                # [핵심] 이중 스캔 (등원 / 하원) 로직
-                # ==========================================
                 if today_records.empty:
                     # [1차 스캔: 등원]
                     from datetime import timedelta
@@ -1491,7 +1510,7 @@ elif menu == "5. QR 키오스크(출석)":
                     memo = f"등원 {now.strftime('%H:%M')}"
                     add_data_bulk('attendance', [{'날짜': td_date, '반이름': c_name, '학생': student_name, '상태': status, '비고': memo}])
                     st.success(f"🏫 [{student_name}] 학생, 환영합니다! ({status})")
-                    st.balloons()
+                    st.balloons() # 등원은 풍선!
                     
                 else:
                     # [2차 스캔: 하원]
@@ -1506,22 +1525,28 @@ elif menu == "5. QR 키오스크(출석)":
                                 can_leave = False
                         
                         if not can_leave:
-                            # 하원 시간이 안 되었을 때 컷트!
                             st.error(f"🚫 [{student_name}] 학생, 아직 하원 시간이 아닙니다! (수업 종료 10분 전부터 가능)")
                             st.warning("일찍 귀가해야 하는 긴급 상황이라면 선생님께 말씀해주세요.")
                         else:
-                            # 정상 하원 처리
                             final_status = "출석" if last_status == "입실" else "지각"
                             new_memo = f"하원 {now.strftime('%H:%M')}"
-                            # 기존 기록을 지우지 않고 새 상태를 덮어씌워 누적(마지막 기록이 최종 상태가 됨)
                             add_data_bulk('attendance', [{'날짜': td_date, '반이름': c_name, '학생': student_name, '상태': final_status, '비고': new_memo}])
-                            st.success(f"🏠 [{student_name}] 학생, 하원 처리가 완료되었습니다. 조심히 가세요!")
+                            
+                            # [수정 2] 하원 시각 효과 극대화 (엄청 큰 글씨 + 눈 내림 효과!)
+                            st.markdown(f"""
+                            <div style='background-color: #E3F2FD; padding: 30px; border-radius: 20px; border: 3px solid #64B5F6; text-align: center; box-shadow: 0px 5px 15px rgba(0,0,0,0.1); margin-top: 20px;'>
+                                <h1 style='color: #1565C0; margin-bottom: 10px; font-size: 36px;'>🏠 하원 처리 완료!</h1>
+                                <h3 style='color: #333;'><b>[{student_name}]</b> 학생, 오늘 하루도 고생했어요!</h3>
+                                <h4 style='color: #555;'>조심히 들어가세요 👋</h4>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            st.snow() # 하원은 눈!
                             
                     elif last_status in ["출석", "지각", "결석", "무단 조퇴", "조퇴(사유인정)", "출석(하원태그 누락)"]:
                         st.info(f"👍 [{student_name}] 학생은 이미 오늘 출결 처리가 완료되었습니다.")
 
         except ImportError:
-            st.error("⚠️ QR 코드 인식 모듈(pyzbar, Pillow)이 설치되지 않았습니다. 터미널에서 'pip install pyzbar Pillow'를 실행해주세요.")
+            st.error("⚠️ QR 코드 인식 모듈(pyzbar, Pillow)이 설치되지 않았습니다.")
         except Exception as e:
             st.error(f"오류가 발생했습니다: {e}")
 
