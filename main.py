@@ -626,17 +626,7 @@ if menu == "🏠 대시보드":
 
     st.divider()
 
-    # 3. 메트릭 현황판
-    c1, c2, c3, c4 = st.columns(4)
-    with c1: st.markdown(f"""<div class="metric-card"><div class="metric-title">총 재원생</div><div class="metric-value">{len(df_s)}명</div></div>""", unsafe_allow_html=True)
-    with c2: st.markdown(f"""<div class="metric-card"><div class="metric-title">오늘 활성된 반</div><div class="metric-value">{len(target_classes)}개</div></div>""", unsafe_allow_html=True)
-    with c3: 
-        att_count = len([k for k, v in att_map.items() if v in ['출석', '지각', '보강/자습']])
-        st.markdown(f"""<div class="metric-card"><div class="metric-title">오늘 등원 완료</div><div class="metric-value">{att_count}명</div></div>""", unsafe_allow_html=True)
-    with c4:
-        st.markdown(f"""<div class="metric-card" style="border-color:#ff4b4b!important;"><div class="metric-title">오늘 미등원/결석</div><div class="metric-value" style="color:#ff4b4b!important;">{len(action_required) + len(absent_list)}명</div></div>""", unsafe_allow_html=True)
-
-    st.divider()
+    
 
     # 4. 실시간 출결 관제 (경고창)
     col_alert, col_list = st.columns([1.2, 1])
