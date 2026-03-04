@@ -562,16 +562,17 @@ if menu == "🏠 대시보드":
     
     if not daily_att.empty:
         for _, r in daily_att.iterrows():
-            sn = str(r.iloc[2])
+            # 💡 [수정 포인트] 장부에 "홍길동/1234"로 적혀있어도 '/' 앞의 이름만 쏙 빼옵니다!
+            sn = str(r.iloc[2]).split('/')[0].strip()
             c_n = str(r.iloc[1])
             status = str(r.iloc[3])
             att_map[(sn, c_n)] = status
             
-            # [핵심] 입실, 출석 등의 기록이 하나라도 있다면 등원한 것으로 묶어버림!
             if status in ['입실', '지각(입실)', '출석', '지각', '조퇴(사유인정)', '출석(하원태그 누락)', '출석(추가)', '지각(추가)']:
                 arrived_students.add(sn)
                 if '지각' in status:
                     late_students.add(sn)
+        
             
     for sn, cname, c_tea, st_time, sph, pph in expected_attendances:
         status = att_map.get((sn, cname), "")
@@ -1500,7 +1501,9 @@ elif menu == "5. QR 키오스크(출석)":
             if not decoded:
                 st.error("❌ QR코드가 인식되지 않았습니다. 밝은 곳에서 화면에 꽉 차게 다시 찍어주세요.")
             else:
-                student_name = decoded[0].data.decode('utf-8').strip()
+                # 💡 [수정 포인트] QR 데이터 "홍길동/1234" 에서 '/' 앞부분인 "홍길동"만 잘라냅니다!
+                raw_qr_data = decoded[0].data.decode('utf-8').strip()
+                student_name = raw_qr_data.split('/')[0].strip()
                 
                 df_e = load_data('enrollments')
                 df_c = load_data('classes')
