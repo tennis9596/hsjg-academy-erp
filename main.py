@@ -2224,57 +2224,95 @@ elif menu == "10. 일일 업무 일지":
     tab1, tab2, tab3 = st.tabs(["📚 반별 수업 일지 작성", "🧑‍🎓 학생 개별 기록 작성", "💬 원장님 피드백 확인"])
     
     # ---------------------------------------------------------
-    # 탭 1: 반별 수업 일지 작성 폼
+    # 탭 1: 반별 수업 일지 작성 폼 (교재 무한 추가 기능 적용)
     # ---------------------------------------------------------
     with tab1:
-        with st.form("class_log_form", clear_on_submit=True):
-            st.markdown("##### 📚 오늘 수업하신 반의 진도와 숙제를 입력하세요.")
+        st.markdown("##### 📚 오늘 수업하신 반의 진도와 숙제를 입력하세요.")
+        
+        # [핵심] 교재 칸 개수를 기억하는 세션 상태 (기본 1개)
+        if 'book_count' not in st.session_state: 
+            st.session_state.book_count = 1
+            
+        with st.container(border=True):
             col1, col2, col3 = st.columns(3)
-            with col1: log_date = st.date_input("날짜", datetime.today().date())
-            with col2: log_teacher = st.selectbox("담당 강사", teacher_names)
-            with col3: log_class = st.selectbox("대상 반", class_names)
+            with col1: log_date = st.date_input("날짜", datetime.today().date(), key="log_date")
+            with col2: log_teacher = st.selectbox("담당 강사", teacher_names, key="log_teacher")
+            with col3: log_class = st.selectbox("대상 반", class_names, key="log_class")
             
-            log_book = st.text_input("사용 교재 (예: 개념원리 수학상 50p~65p)")
-            log_progress = st.text_area("수업 진도 및 내용 (최대한 상세히 적어주세요)", height=100)
-            log_homework = st.text_input("부과된 숙제 (없으면 '없음'으로 기재)")
+            st.divider()
+            st.markdown("###### 📖 사용 교재")
             
-            if st.form_submit_button("반별 일지 저장하기", use_container_width=True):
+            # 동적으로 늘어나는 교재 입력 칸
+            books = []
+            for i in range(st.session_state.book_count):
+                b = st.text_input(f"교재 {i+1}", placeholder="예: 개념원리 수학상 50p~65p", key=f"log_book_{i}")
+                books.append(b)
+                
+            # 칸 추가 버튼
+            if st.button("➕ 교재 칸 추가", key="add_book_btn"):
+                st.session_state.book_count += 1
+                st.rerun()
+                
+            st.divider()
+            log_progress = st.text_area("수업 진도 및 내용 (최대한 상세히 적어주세요)", height=100, key="log_progress")
+            log_homework = st.text_input("부과된 숙제 (없으면 '없음'으로 기재)", key="log_homework")
+            
+            # 저장 버튼
+            if st.button("💾 반별 일지 저장하기", use_container_width=True, type="primary"):
                 if log_class == "담당 배정된 반이 없습니다.": 
                     st.error("배정된 반이 없습니다. 원장님께 문의해주세요.")
                 elif not log_progress: 
                     st.warning("수업 진도 및 내용을 입력해 주세요.")
                 else:
+                    # 입력된 교재들만 모아서 보기 좋게 쉼표로 합치기 (빈칸 제외)
+                    valid_books = [b.strip() for b in books if b.strip()]
+                    final_books = ", ".join(valid_books) if valid_books else "입력 없음"
+                    
                     add_data('class_logs', {
                         '날짜': str(log_date), '강사명': log_teacher, '대상반': log_class, 
-                        '사용교재': log_book, '수업진도': log_progress, '부과된숙제': log_homework
+                        '사용교재': final_books, '수업진도': log_progress, '부과된숙제': log_homework
                     })
                     st.success(f"✅ [{log_class}] 반의 일지가 저장되었습니다!")
+                    
+                    # 폼 초기화 로직 (저장 후 작성했던 칸 싹 비우기)
+                    st.session_state.book_count = 1
+                    keys_to_clear = ["log_progress", "log_homework"] + [f"log_book_{i}" for i in range(20)]
+                    for k in keys_to_clear:
+                        if k in st.session_state: del st.session_state[k]
+                    time.sleep(1.5)
+                    st.rerun()
 
     # ---------------------------------------------------------
-    # 탭 2: 학생 개별 기록 작성 폼
+    # 탭 2: 학생 개별 기록 작성 폼 (다중 분류 선택 및 점수란 완전 제거)
     # ---------------------------------------------------------
     with tab2:
         with st.form("student_record_form", clear_on_submit=True):
-            st.markdown("##### 🧑‍🎓 특정 학생의 테스트 결과나 상담, 특이사항을 기록하세요.")
+            st.markdown("##### 🧑‍🎓 특정 학생의 상담 내용이나 특이사항을 기록하세요.")
             col1, col2, col3 = st.columns(3)
             with col1: sr_date = st.date_input("날짜", datetime.today().date())
             with col2: sr_teacher = st.selectbox("작성 강사", teacher_names)
             with col3: sr_student = st.selectbox("대상 학생", student_names)
             
-            col_cat, col_score = st.columns([1, 1])
-            with col_cat: sr_category = st.selectbox("기록 분류", ["테스트 결과", "학생 상담", "학부모 상담", "특이사항 (태도 등)"])
-            with col_score: sr_score = st.text_input("테스트 점수 (테스트 결과인 경우에만 숫자 입력)")
+            # 💡 [수정 포인트 1] 점수 입력칸(col_score) 완전 삭제
+            # 💡 [수정 포인트 2] selectbox를 multiselect로 변경하여 여러 개 동시 선택 가능하게 적용
+            sr_categories = st.multiselect("기록 분류 (해당하는 것을 모두 고르세요)", ["테스트 결과", "학생 상담", "학부모 상담", "특이사항 (태도 등)"])
             sr_details = st.text_area("세부 내용", height=150)
             
-            if st.form_submit_button("학생 개별 기록 저장하기", use_container_width=True):
+            if st.form_submit_button("학생 개별 기록 저장하기", use_container_width=True, type="primary"):
                 if sr_student == "등록된 학생 없음": 
                     st.error("등록된 학생이 없습니다.")
+                elif not sr_categories:
+                    st.warning("기록 분류를 최소 1개 이상 선택해 주세요.")
                 elif not sr_details: 
                     st.warning("세부 내용을 입력해 주세요.")
                 else:
+                    # 💡 [수정 포인트 3] 선택된 여러 분류를 쉼표로 예쁘게 합쳐줍니다. (예: "학생 상담, 학부모 상담")
+                    final_categories = ", ".join(sr_categories)
+                    
                     add_data('student_records', {
                         '날짜': str(sr_date), '강사명': sr_teacher, '학생명': sr_student, 
-                        '분류': sr_category, '세부내용': sr_details, '점수': sr_score if sr_score.strip() else ""
+                        '분류': final_categories, '세부내용': sr_details, 
+                        '점수': "" # 기존 구글 시트 장부 열(Column)이 꼬이지 않도록 빈칸으로 안전하게 전송합니다.
                     })
                     st.success(f"✅ [{sr_student}] 학생 기록이 저장되었습니다!")
 
