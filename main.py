@@ -363,40 +363,49 @@ if not st.session_state['logged_in']:
             st.divider()
             
             if login_type == "👑 원장(관리자)":
-                admin_pw = st.text_input("마스터 비밀번호", type="password")
-                if st.button("원장님 로그인", use_container_width=True, type="primary"):
-                    if admin_pw == "1234":  # 원장님 비밀번호
-                        st.session_state['logged_in'] = True
-                        st.session_state['role'] = 'admin'
-                        st.session_state['username'] = '원장'
-                        st.rerun()
-                    else: st.error("비밀번호가 틀렸습니다.")
+                # [수정] st.form을 사용하여 엔터키 입력 시 자동 로그인되도록 묶어줍니다!
+                with st.form("admin_login_form", border=False, clear_on_submit=True):
+                    admin_pw = st.text_input("마스터 비밀번호", type="password")
+                    # 버튼 대신 form_submit_button을 사용합니다.
+                    submitted = st.form_submit_button("원장님 로그인", use_container_width=True, type="primary")
+                    
+                    if submitted:
+                        if admin_pw == "1234":  # 원장님 비밀번호
+                            st.session_state['logged_in'] = True
+                            st.session_state['role'] = 'admin'
+                            st.session_state['username'] = '원장'
+                            st.rerun()
+                        else: st.error("비밀번호가 틀렸습니다.")
                     
             elif login_type == "👨‍🏫 강사":
                 df_t_login = load_data('teachers')
                 if df_t_login.empty:
                     st.warning("등록된 강사가 없습니다. 원장님 계정으로 접속하여 강사를 먼저 등록해주세요.")
                 else:
-                    t_names = df_t_login.iloc[:, 0].tolist()
-                    sel_t = st.selectbox("강사명 선택", t_names)
-                    t_pw = st.text_input("비밀번호 (기본값: 연락처 뒷 4자리)", type="password")
-                    
-                    if st.button("강사 로그인", use_container_width=True, type="primary"):
-                        row = df_t_login[df_t_login.iloc[:,0] == sel_t].iloc[0]
-                        expected_pw = ""
-                        if '비밀번호' in df_t_login.columns: expected_pw = str(row.get('비밀번호', ''))
+                    # [수정] 강사 로그인도 엔터키가 먹히도록 st.form으로 묶어줍니다.
+                    with st.form("teacher_login_form", border=False, clear_on_submit=True):
+                        t_names = df_t_login.iloc[:, 0].tolist()
+                        sel_t = st.selectbox("강사명 선택", t_names)
+                        t_pw = st.text_input("비밀번호 (기본값: 연락처 뒷 4자리)", type="password")
                         
-                        if not expected_pw or expected_pw == "nan":
-                            phone = str(row.get('연락처', '0000')).replace('-', '')
-                            expected_pw = phone[-4:] if len(phone)>=4 else "0000"
+                        submitted = st.form_submit_button("강사 로그인", use_container_width=True, type="primary")
+                        
+                        if submitted:
+                            row = df_t_login[df_t_login.iloc[:,0] == sel_t].iloc[0]
+                            expected_pw = ""
+                            if '비밀번호' in df_t_login.columns: expected_pw = str(row.get('비밀번호', ''))
                             
-                        if t_pw == expected_pw:
-                            st.session_state['logged_in'] = True
-                            st.session_state['role'] = 'teacher'
-                            st.session_state['username'] = sel_t
-                            st.rerun()
-                        else: st.error("비밀번호가 일치하지 않습니다.")
-                        
+                            if not expected_pw or expected_pw == "nan":
+                                phone = str(row.get('연락처', '0000')).replace('-', '')
+                                expected_pw = phone[-4:] if len(phone)>=4 else "0000"
+                                
+                            if t_pw == expected_pw:
+                                st.session_state['logged_in'] = True
+                                st.session_state['role'] = 'teacher'
+                                st.session_state['username'] = sel_t
+                                st.rerun()
+                            else: st.error("비밀번호가 일치하지 않습니다.")
+                    
             # [핵심] 키오스크 모드: 비밀번호 없이 바로 입장!
             elif login_type == "📷 출석 키오스크":
                 st.info("💡 데스크 출결용 태블릿 전용 모드입니다. (비밀번호 불필요)")
@@ -548,15 +557,35 @@ if menu == "🏠 대시보드":
     auto_absent_to_db = [] 
     
     att_map = {}
+    arrived_students = set() # [추가] 오늘 하루 한 번이라도 등원한 학생 목록
+    late_students = set()    # [추가] 오늘 지각 기록이 있는 학생 목록
+    
     if not daily_att.empty:
         for _, r in daily_att.iterrows():
-            att_map[(r.iloc[2], r.iloc[1])] = r.iloc[3] 
+            sn = str(r.iloc[2])
+            c_n = str(r.iloc[1])
+            status = str(r.iloc[3])
+            att_map[(sn, c_n)] = status
+            
+            # [핵심] 입실, 출석 등의 기록이 하나라도 있다면 등원한 것으로 묶어버림!
+            if status in ['입실', '지각(입실)', '출석', '지각', '조퇴(사유인정)', '출석(하원태그 누락)', '출석(추가)', '지각(추가)']:
+                arrived_students.add(sn)
+                if '지각' in status:
+                    late_students.add(sn)
             
     for sn, cname, c_tea, st_time, sph, pph in expected_attendances:
-        if (sn, cname) in att_map:
-            status = att_map[(sn, cname)]
-            if status == '지각': late_list.append((sn, cname, c_tea, st_time, sph))
-            elif status == '결석': absent_list.append((sn, cname, c_tea, st_time, sph))
+        status = att_map.get((sn, cname), "")
+        
+        # 특정 반에 명시적으로 결석 처리가 된 경우
+        if status in ['결석', '결석(추가)']: 
+            absent_list.append((sn, cname, c_tea, st_time, sph))
+            
+        # 💡 [핵심 해결] 오늘 학원 울타리 안(arrived_students)에 들어온 학생은 미등원 알람에서 무조건 구출!
+        elif sn in arrived_students:
+            if sn in late_students and not any(l[0] == sn for l in late_list):
+                late_list.append((sn, cname, c_tea, st_time, sph)) # 지각 명단에는 추가
+                
+        # 아직 학원에 오지 않은 학생들 (지각 여부 검사)
         else:
             try:
                 h, m = map(int, st_time.split(':'))
@@ -572,7 +601,7 @@ if menu == "🏠 대시보드":
         add_data_bulk('attendance', auto_absent_to_db)
         st.rerun() 
 
-    # [핵심 변경 2] 문자열 시간(예: "17:00")을 분(minute)으로 변환하여 완벽하게 최신순 정렬
+    # [시간 정렬 로직]
     def time_to_min_for_sort(t_str):
         try:
             h, m = map(int, t_str.split(':'))
@@ -582,6 +611,19 @@ if menu == "🏠 대시보드":
     action_required.sort(key=lambda x: time_to_min_for_sort(x[3]), reverse=True)
     late_list.sort(key=lambda x: time_to_min_for_sort(x[3]), reverse=True)
     absent_list.sort(key=lambda x: time_to_min_for_sort(x[3]), reverse=True)
+
+    # 3. 메트릭 현황판 (수치 표시)
+    c1, c2, c3, c4 = st.columns(4)
+    with c1: st.markdown(f"""<div class="metric-card"><div class="metric-title">총 재원생</div><div class="metric-value">{len(df_s)}명</div></div>""", unsafe_allow_html=True)
+    with c2: st.markdown(f"""<div class="metric-card"><div class="metric-title">오늘 활성된 반</div><div class="metric-value">{len(target_classes)}개</div></div>""", unsafe_allow_html=True)
+    with c3: 
+        # 💡 [수정] 복잡한 계산 대신 오늘 등원한 순수 학생 수(arrived_students)로 정확히 표시!
+        att_count = len(arrived_students)
+        st.markdown(f"""<div class="metric-card"><div class="metric-title">오늘 등원 완료</div><div class="metric-value">{att_count}명</div></div>""", unsafe_allow_html=True)
+    with c4:
+        st.markdown(f"""<div class="metric-card" style="border-color:#ff4b4b!important;"><div class="metric-title">오늘 미등원/결석</div><div class="metric-value" style="color:#ff4b4b!important;">{len(action_required) + len(absent_list)}명</div></div>""", unsafe_allow_html=True)
+
+    st.divider()
 
     # 3. 메트릭 현황판
     c1, c2, c3, c4 = st.columns(4)
@@ -2289,9 +2331,10 @@ elif menu == "10. 일일 업무 일지":
             st.caption("도착한 피드백이 없습니다. 오늘도 수고 많으셨습니다! 😊")
 
 # ==========================================
-# 업무 일지 관리 (원장님 피드백 화면)
+# 11. 업무 일지 관리 (원장님 피드백 화면)
 # ==========================================
-elif menu == "업무 일지 관리":
+# 이렇게 수정해야 정상 작동합니다!
+elif menu == "11. 업무 일지 관리":
     st.subheader("업무 일지 열람 및 관리자 피드백")
     st.markdown("강사님들이 작성한 일지를 확인하고, 피드백이나 격려의 코멘트를 남겨주세요.")
     
