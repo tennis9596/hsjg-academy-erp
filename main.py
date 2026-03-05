@@ -1600,22 +1600,41 @@ elif menu == "6. 출석 관리":
     
     df_e = load_data('enrollments')
     df_a = load_data('attendance')
+    df_c = load_data('classes') # 💡 [추가] 강사의 담당 반을 찾기 위해 classes 데이터도 불러옵니다.
     
-    # --- [Tab 1] 일일 수동 출석 체크 (기존 데이터 불러오기 기능 추가) ---
+    # --- [Tab 1] 일일 수동 출석 체크 (기존 데이터 불러오기 및 강사별 맞춤 필터 적용) ---
     with tab1:
         if df_e.empty: st.info("수강 배정 데이터가 없습니다. 먼저 수강 배정을 진행해주세요.")
         else:
             c1, c2 = st.columns(2)
             td = c1.date_input("날짜", datetime.today())
-            class_list = sorted(df_e.iloc[:,2].unique().tolist())
+            
+            # 💡 [핵심 로직] 로그인한 사람이 강사라면 본인의 반만 목록에 띄웁니다!
+            raw_class_list = sorted(df_e.iloc[:,2].unique().tolist())
+            if st.session_state['role'] == 'teacher':
+                my_name = st.session_state['username']
+                if not df_c.empty:
+                    # 전체 개설된 반 중에서 내 이름(강사명)이 들어간 반만 쏙 골라내기
+                    my_assigned_classes = df_c[df_c.iloc[:, 1].str.contains(my_name)].iloc[:, 0].tolist()
+                    # 수강생이 있는 반(raw_class_list) 중에서 내 담당 반만 최종 필터링
+                    class_list = [c for c in raw_class_list if c in my_assigned_classes]
+                else:
+                    class_list = []
+                
+                if not class_list:
+                    class_list = ["담당 중인 반(수강생 있음)이 없습니다."]
+            else:
+                # 원장님(admin)은 학원의 모든 반을 볼 수 있습니다.
+                class_list = raw_class_list
+                
             cls = c2.selectbox("반 선택", class_list)
             
-            if cls:
+            if cls and cls != "담당 중인 반(수강생 있음)이 없습니다.":
                 if '상태' not in df_e.columns: df_e['상태'] = '수강중'
                 active_stds = df_e[(df_e.iloc[:,2] == cls) & (df_e['상태'] != '수강종료')]
                 stds = sorted(list(set(active_stds.iloc[:,0].tolist())))
                 
-                # 💡 [핵심 추가] 해당 날짜에 이미 구글 시트에 저장된 출석 기록을 분석해서 가져옵니다!
+                # 기존 구글 시트에 저장된 출석 기록 불러오기
                 existing_att = {}
                 if not df_a.empty:
                     cls_att = df_a[(df_a.iloc[:,0].astype(str) == str(td)) & (df_a.iloc[:,1] == cls)]
@@ -1634,11 +1653,10 @@ elif menu == "6. 출석 관리":
                         with cols[i % 3]:
                             st.markdown(f"**{s}**")
                             
-                            # 💡 [핵심 수정] 장부의 기록을 분석하여 기본 선택값(index)을 자동으로 맞춰줍니다.
                             saved_status = existing_att.get(s, "")
-                            def_idx = 0  # 아무 기록이 없으면 기본값은 '출석'
+                            def_idx = 0 
                             
-                            if "결석" in saved_status: def_idx = 1      # 시스템 자동결석 등도 모두 결석으로 인식
+                            if "결석" in saved_status: def_idx = 1
                             elif "지각" in saved_status: def_idx = 2
                             elif "무단 조퇴" in saved_status: def_idx = 3
                             elif "조퇴(사유인정)" in saved_status: def_idx = 4
@@ -1646,7 +1664,7 @@ elif menu == "6. 출석 관리":
                             
                             sel_stat = st.selectbox(f"{s} 상태", status_options, index=def_idx, key=f"stat_{s}", label_visibility="collapsed")
                             res[s] = sel_stat
-                            st.write("") # 간격 띄우기
+                            st.write("") 
                     
                     st.markdown("---")
                     
