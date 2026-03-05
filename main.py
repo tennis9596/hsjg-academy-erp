@@ -16,6 +16,11 @@ import os
 import calendar
 import os
 import time
+import holidays # 💡 [추가] 한국 공휴일 라이브러리
+
+# 💡 [핵심 추가] 한국 공휴일 세팅 (올해 기준 앞뒤 2년 넉넉하게)
+current_year = datetime.today().year
+kr_holidays = holidays.KR(years=range(current_year-2, current_year+3))
 
 # [중요] 시스템 전체 시간을 한국 시간(KST)으로 강제 고정
 # 리눅스 기반인 스트림릿 클라우드 서버에서만 작동하며, 윈도우 로컬에서는 무시됩니다.
@@ -500,6 +505,28 @@ if menu == "🏠 대시보드":
     # 1. 오늘 예정된 모든 수업과 수강생 명단 추출
     days_ko = ["월", "화", "수", "목", "금", "토", "일"]
     target_yoil = days_ko[selected_date.weekday()]
+    
+    # 💡 [핵심 추가] 오늘이 공휴일인지 확인합니다!
+    is_holiday = selected_date in kr_holidays
+    holiday_name = kr_holidays.get(selected_date)
+    
+    if is_holiday:
+        st.error(f"🔴 **오늘은 {holiday_name} (공휴일/대체공휴일)입니다.**")
+        st.caption("💡 공휴일에는 '정규 수업'의 미등원 알람 및 자동 결석 처리가 작동하지 않으며, '보강' 수업만 정상 체크됩니다.")
+    
+    target_classes = []
+    expected_attendances = [] 
+    
+    if not df_c.empty:
+        for _, row in df_c.iterrows():
+            c_name = row.iloc[0]
+            c_teacher = row.iloc[1]
+            c_type = row.get('구분', '정규')
+            is_valid_date = True
+            
+            # 💡 [핵심 방어] 오늘이 공휴일인데, 이 반이 '정규' 수업이면 이번 턴은 무시하고 넘어감!
+            if is_holiday and c_type == '정규':
+                continue
     
     target_classes = []
     expected_attendances = [] 
@@ -2220,23 +2247,47 @@ elif menu == "9. 학생 개인별 종합":
                         att_map[day_int].append(status)
                 except: pass
 
+            # 💡 [달력 마법 적용] 일요일부터 시작하도록 파이썬 달력 설정 변경
+            calendar.setfirstweekday(calendar.SUNDAY)
+            
             d_cols = st.columns(7)
-            days_ko = ["월", "화", "수", "목", "금", "토", "일"]
-            for i, d in enumerate(days_ko): d_cols[i].markdown(f"<div style='text-align:center; color:gray; font-size:0.8rem;'>{d}</div>", unsafe_allow_html=True)
+            # 💡 월화수목금토일 -> 일월화수목금토 변경!
+            days_ko = ["일", "월", "화", "수", "목", "금", "토"] 
+            day_colors = ["#D32F2F", "gray", "gray", "gray", "gray", "gray", "#1976D2"] # 빨 검 검 검 검 검 파
+            
+            for i, d in enumerate(days_ko): 
+                d_cols[i].markdown(f"<div style='text-align:center; color:{day_colors[i]}; font-size:0.9rem; font-weight:900;'>{d}</div>", unsafe_allow_html=True)
+                
             month_cal = calendar.monthcalendar(st.session_state.view_year, st.session_state.view_month)
+            
             for week in month_cal:
                 w_cols = st.columns(7)
                 for i, day in enumerate(week):
                     with w_cols[i]:
-                        if day == 0: st.write("") 
+                        if day == 0: 
+                            st.write("") 
                         else:
-                            st.markdown(f"**{day}**")
+                            # 💡 오늘이 무슨 날인지 확인 (공휴일 여부 체크)
+                            target_date = datetime(st.session_state.view_year, st.session_state.view_month, day).date()
+                            h_name = kr_holidays.get(target_date)
+                            
+                            # 색상 결정: 일요일(0)이나 공휴일이면 무조건 빨간색, 토요일(6)이면 파란색
+                            if i == 0 or h_name: num_color = "#D32F2F"
+                            elif i == 6: num_color = "#1976D2"
+                            else: num_color = "#212121"
+                            
+                            st.markdown(f"<div style='color:{num_color}; font-weight:800; font-size:1.1rem;'>{day}</div>", unsafe_allow_html=True)
+                            
+                            # 💡 공휴일이면 날짜 아래에 작게 빨간색으로 이름 표시 (예: 대체공휴일, 설날)
+                            if h_name:
+                                st.markdown(f"<div style='color:#D32F2F; font-size:0.65rem; font-weight:bold; line-height:1; margin-bottom:4px;'>{h_name}</div>", unsafe_allow_html=True)
+                            
                             if day in att_map:
                                 statuses = att_map[day]
                                 for s in statuses:
-                                    if s == '출석': st.markdown(f"<span style='color:green; font-size:0.8rem;'>🟢 출석</span>", unsafe_allow_html=True)
-                                    elif s == '지각': st.markdown(f"<span style='color:orange; font-size:0.8rem;'>🟠 지각</span>", unsafe_allow_html=True)
-                                    elif s == '결석': st.markdown(f"<span style='color:red; font-size:0.8rem;'>🔴 결석</span>", unsafe_allow_html=True)
+                                    if s == '출석': st.markdown(f"<span style='color:green; font-size:0.8rem; font-weight:bold;'>🟢 출석</span>", unsafe_allow_html=True)
+                                    elif s == '지각': st.markdown(f"<span style='color:orange; font-size:0.8rem; font-weight:bold;'>🟠 지각</span>", unsafe_allow_html=True)
+                                    elif s == '결석': st.markdown(f"<span style='color:red; font-size:0.8rem; font-weight:bold;'>🔴 결석</span>", unsafe_allow_html=True)
                             else: st.markdown("<br>", unsafe_allow_html=True)
             
             if att_map:
