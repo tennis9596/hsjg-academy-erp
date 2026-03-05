@@ -728,6 +728,7 @@ if menu == "🏠 대시보드":
                             <div class='class-card' style='min-height: 80px; {card_style}'>
                                 <div class='cc-name'>{mc['name']} {badge}</div>
                                 <div class='cc-info'>👨‍🏫 {mc['teacher']}</div>
+                                <div class='cc-time'>⏰ {mc['time']}</div> <div class='cc-info' style='margin-top:6px; font-size:0.8rem; color:#424242; line-height: 1.3;'>
                                 <div class='cc-info' style='margin-top:6px; font-size:0.8rem; color:#424242; line-height: 1.3;'>
                                     <strong style='color:{title_color}; font-size:0.85rem;'>👥 총 {student_count}명</strong><br>
                                     <span style='color:#666;'>{std_str}</span>
