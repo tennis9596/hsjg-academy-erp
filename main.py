@@ -2168,6 +2168,7 @@ elif menu == "9. 학생 개인별 종합":
     df_s = load_data('students')
     df_e = load_data('enrollments')
     df_a = load_data('attendance')
+    df_c = load_data('classes')
 
     if df_s.empty: st.warning("등록된 학생이 없습니다.")
     else:
