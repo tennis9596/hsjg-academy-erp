@@ -2155,8 +2155,17 @@ elif menu == "9. 학생 개인별 종합":
             st.divider()
             col_p1, col_p2 = st.columns([1, 4])
             with col_p1:
-                qr_img = generate_styled_qr(f"{real_name}", real_name)
+                # 💡 [수정 1] 동명이인 방지를 위해 2번 메뉴와 동일하게 전화번호 뒷자리 꼬리표 부착
+                ph = str(s_info.iloc[1])[-4:] if len(s_info) > 1 else "0000"
+                qr_img = generate_styled_qr(f"{real_name}/{ph}", real_name)
                 st.image(qr_img, width=130)
+                
+                # 💡 [핵심 추가] 프로필 사진 바로 아래에 QR 다운로드 버튼 생성!
+                buf = io.BytesIO()
+                qr_img.save(buf, format="PNG")
+                byte_im = buf.getvalue()
+                st.download_button("💾 QR 다운로드", data=byte_im, file_name=f"형설지공_{real_name}_QR.png", mime="image/png", use_container_width=True)
+                
             with col_p2:
                 st.markdown(f"### **{s_info.iloc[0]}**")
                 st.caption(f"🏫 {s_info.iloc[4]} ({s_info.iloc[3]}) | 📞 {s_info.iloc[1]}")
