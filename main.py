@@ -1601,7 +1601,7 @@ elif menu == "6. 출석 관리":
     df_e = load_data('enrollments')
     df_a = load_data('attendance')
     
-    # --- [Tab 1] 일일 수동 출석 체크 (세밀한 상태 선택 기능 추가) ---
+    # --- [Tab 1] 일일 수동 출석 체크 (기존 데이터 불러오기 기능 추가) ---
     with tab1:
         if df_e.empty: st.info("수강 배정 데이터가 없습니다. 먼저 수강 배정을 진행해주세요.")
         else:
@@ -1612,24 +1612,39 @@ elif menu == "6. 출석 관리":
             
             if cls:
                 if '상태' not in df_e.columns: df_e['상태'] = '수강중'
-                # 💡 [핵심 수정] 수동 출석부 화면에 퇴원생/수강종료생 이름이 뜨지 않도록 깔끔하게 필터링!
                 active_stds = df_e[(df_e.iloc[:,2] == cls) & (df_e['상태'] != '수강종료')]
                 stds = sorted(list(set(active_stds.iloc[:,0].tolist())))
+                
+                # 💡 [핵심 추가] 해당 날짜에 이미 구글 시트에 저장된 출석 기록을 분석해서 가져옵니다!
+                existing_att = {}
+                if not df_a.empty:
+                    cls_att = df_a[(df_a.iloc[:,0].astype(str) == str(td)) & (df_a.iloc[:,1] == cls)]
+                    for _, r in cls_att.iterrows():
+                        existing_att[str(r.iloc[2])] = str(r.iloc[3])
+                
                 st.divider()
                 st.markdown(f"#### 📢 '{cls}' 출석부 ({len(stds)}명)")
                 
-                with st.form("att_form", clear_on_submit=False): # 상태 확인을 위해 제출 후 초기화 끔
-                    # 강사가 선택할 수 있는 디테일한 상태값들
+                with st.form("att_form", clear_on_submit=False): 
                     status_options = ["출석", "결석", "지각", "무단 조퇴", "조퇴(사유인정)", "출석(하원태그 누락)"]
                     
-                    # 화면을 예쁘게 3칸으로 나누어 학생별 셀렉트박스 배치
                     cols = st.columns(3)
                     res = {}
                     for i, s in enumerate(stds):
                         with cols[i % 3]:
                             st.markdown(f"**{s}**")
-                            # 기본값은 '출석'으로 두되, 강사가 자유롭게 변경 가능
-                            sel_stat = st.selectbox(f"{s} 상태", status_options, key=f"stat_{s}", label_visibility="collapsed")
+                            
+                            # 💡 [핵심 수정] 장부의 기록을 분석하여 기본 선택값(index)을 자동으로 맞춰줍니다.
+                            saved_status = existing_att.get(s, "")
+                            def_idx = 0  # 아무 기록이 없으면 기본값은 '출석'
+                            
+                            if "결석" in saved_status: def_idx = 1      # 시스템 자동결석 등도 모두 결석으로 인식
+                            elif "지각" in saved_status: def_idx = 2
+                            elif "무단 조퇴" in saved_status: def_idx = 3
+                            elif "조퇴(사유인정)" in saved_status: def_idx = 4
+                            elif "누락" in saved_status: def_idx = 5
+                            
+                            sel_stat = st.selectbox(f"{s} 상태", status_options, index=def_idx, key=f"stat_{s}", label_visibility="collapsed")
                             res[s] = sel_stat
                             st.write("") # 간격 띄우기
                     
@@ -1648,11 +1663,10 @@ elif menu == "6. 출석 관리":
                             is_extra = "추가" in class_mode
                             
                             for s_name, status in res.items():
-                                # 추가 수업 처리 및 '사유인정/태그누락' 같은 긴 글자를 장부용 기호에 맞게 단순화
                                 final_status = status
                                 if status in ["조퇴(사유인정)", "출석(하원태그 누락)"]: 
-                                    final_status = "출석" # 장부에는 O 로 예쁘게 찍히도록
-                                    memo = f"[{status}] {memo}" # 대신 비고란에 이유를 박아둠
+                                    final_status = "출석" 
+                                    memo = f"[{status}] {memo}" 
                                 
                                 if is_extra:
                                     final_status = f"{final_status}(추가)"
