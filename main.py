@@ -526,7 +526,9 @@ if menu == "🏠 대시보드":
                         
                         enrolled_students = []
                         if not df_e.empty:
-                            matched_enrolls = df_e[df_e.iloc[:,2] == c_name]
+                            if '상태' not in df_e.columns: df_e['상태'] = '수강중'
+                            # 💡 [핵심 수정] 수강종료된 학생은 오늘 출석 기대 명단에서 완전히 제외합니다!
+                            matched_enrolls = df_e[(df_e.iloc[:,2] == c_name) & (df_e['상태'] != '수강종료')]
                             for sn in matched_enrolls.iloc[:,0].tolist():
                                 s_grade, s_phone, p_phone = "", "", ""
                                 if not df_s.empty:
@@ -1505,7 +1507,10 @@ elif menu == "5. QR 키오스크(출석)":
                 
                 my_classes = []
                 if not df_e.empty:
-                    my_classes = df_e[df_e.iloc[:, 0] == student_name].iloc[:, 2].tolist()
+                    if '상태' not in df_e.columns: df_e['상태'] = '수강중'
+                    # 💡 [핵심 수정] 예전에 듣다 종료된 반의 시간표에 발목 잡히지 않도록, 수강중인 반만 추출!
+                    active_e = df_e[(df_e.iloc[:, 0] == student_name) & (df_e['상태'] != '수강종료')]
+                    my_classes = active_e.iloc[:, 2].tolist()
                     
                 today_end_time = None
                 today_start_time = None
@@ -1606,7 +1611,10 @@ elif menu == "6. 출석 관리":
             cls = c2.selectbox("반 선택", class_list)
             
             if cls:
-                stds = sorted(list(set(df_e[df_e.iloc[:,2] == cls].iloc[:,0].tolist())))
+                if '상태' not in df_e.columns: df_e['상태'] = '수강중'
+                # 💡 [핵심 수정] 수동 출석부 화면에 퇴원생/수강종료생 이름이 뜨지 않도록 깔끔하게 필터링!
+                active_stds = df_e[(df_e.iloc[:,2] == cls) & (df_e['상태'] != '수강종료')]
+                stds = sorted(list(set(active_stds.iloc[:,0].tolist())))
                 st.divider()
                 st.markdown(f"#### 📢 '{cls}' 출석부 ({len(stds)}명)")
                 
