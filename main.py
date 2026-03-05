@@ -2291,12 +2291,105 @@ elif menu == "9. 학생 개인별 종합":
                             else: st.markdown("<br>", unsafe_allow_html=True)
             
             if att_map:
-                st.markdown("---")
-                all_statuses = [s for sublist in att_map.values() for s in sublist]
-                c1, c2, c3 = st.columns(3)
-                c1.metric("이달의 출석", f"{all_statuses.count('출석')}회")
-                c2.metric("지각", f"{all_statuses.count('지각')}회")
-                c3.metric("결석", f"{all_statuses.count('결석')}회")
+                # 💡 [여기서부터 끝까지 싹 덮어쓰기]
+            st.markdown("---")
+            st.markdown("##### 📊 과목별 이달의 출결 요약")
+            
+            if not df_e.empty and not df_c.empty:
+                if '상태' not in df_e.columns: df_e['상태'] = '수강중'
+                
+                # 1. 이 학생이 수강했던(또는 수강중인) 반의 과목 매핑 만들기
+                my_all_enrolls = df_e[df_e.iloc[:,0] == real_name]
+                class_to_subj = {}
+                for _, r in my_all_enrolls.iterrows():
+                    class_to_subj[r.iloc[2]] = r.iloc[1] # 반이름 -> 과목
+                
+                # 현재 수강 중인 반을 과목별로 묶기
+                active_enrolls = my_all_enrolls[my_all_enrolls['상태'] != '수강종료']
+                active_subjects = list(set(active_enrolls.iloc[:,1].tolist()))
+                
+                if not active_subjects:
+                    st.info("현재 수강 중인 과목이 없습니다.")
+                else:
+                    days_ko_idx = ["월", "화", "수", "목", "금", "토", "일"]
+                    last_day = calendar.monthrange(st.session_state.view_year, st.session_state.view_month)[1]
+                    
+                    target_ym = f"{st.session_state.view_year}-{st.session_state.view_month:02d}"
+                    my_month_att = pd.DataFrame()
+                    if not df_a.empty:
+                        my_att = df_a[df_a.iloc[:,2] == real_name]
+                        my_month_att = my_att[my_att.iloc[:,0].astype(str).str.contains(target_ym)]
+                    
+                    # 💡 과목별로 루프를 돌면서 카드를 생성합니다!
+                    for subj in sorted(active_subjects):
+                        st.markdown(f"###### 🏷️ **{subj}**")
+                        
+                        subj_expected_regular = 0
+                        subj_regular_days = []
+                        
+                        # 해당 과목의 반 시간표 추출
+                        subj_classes = active_enrolls[active_enrolls.iloc[:,1] == subj].iloc[:,2].tolist()
+                        for c in subj_classes:
+                            c_info = df_c[df_c.iloc[:,0] == c]
+                            if not c_info.empty:
+                                c_type = c_info.iloc[0].get('구분', '정규')
+                                if c_type == '정규':
+                                    try:
+                                        schedule_str = str(c_info.iloc[0, 2])
+                                        days_in_class = [p.strip()[0] for p in schedule_str.split(',') if p.strip()]
+                                        subj_regular_days.append(days_in_class)
+                                    except: pass
+                        
+                        # 해당 과목의 이번 달 정규수업 총 예정 횟수 계산 (일요일, 공휴일 제외)
+                        for day in range(1, last_day + 1):
+                            target_date = datetime(st.session_state.view_year, st.session_state.view_month, day).date()
+                            if target_date.weekday() == 6: continue 
+                            if target_date in kr_holidays: continue 
+                            
+                            target_yoil = days_ko_idx[target_date.weekday()]
+                            for cls_days in subj_regular_days:
+                                if target_yoil in cls_days:
+                                    subj_expected_regular += 1
+                        
+                        # 해당 과목의 실제 출결 기록만 추출
+                        subj_statuses = []
+                        if not my_month_att.empty:
+                            for _, r in my_month_att.iterrows():
+                                att_c_name = r.iloc[1]
+                                if class_to_subj.get(att_c_name) == subj:
+                                    subj_statuses.append(r.iloc[3])
+                                    
+                        # 정규 출결 계산
+                        reg_att = sum(1 for s in subj_statuses if "추가" not in s and any(k in s for k in ['출석', '입실', '조퇴(사유인정)']))
+                        reg_late = sum(1 for s in subj_statuses if "추가" not in s and "지각" in s)
+                        reg_abs = sum(1 for s in subj_statuses if "추가" not in s and ("결석" in s or "무단 조퇴" in s))
+                        
+                        # 추가(보강) 출결 계산
+                        ext_total = sum(1 for s in subj_statuses if "추가" in s)
+                        ext_att = sum(1 for s in subj_statuses if "추가" in s and any(k in s for k in ['출석', '조퇴(사유인정)']))
+                        ext_late = sum(1 for s in subj_statuses if "추가" in s and "지각" in s)
+                        ext_abs = sum(1 for s in subj_statuses if "추가" in s and ("결석" in s or "무단 조퇴" in s))
+                        
+                        # 화면 표시 (과목별로 나란히 카드 배치)
+                        mc1, mc2 = st.columns(2)
+                        with mc1:
+                            st.markdown(f"<div style='padding:15px; background-color:#E3F2FD; border-radius:10px; border-left:6px solid #1565C0; margin-bottom:15px;'>"
+                                        f"<h6 style='margin:0 0 8px 0; color:#1565C0;'>🔵 정규 수업 (월 예정: {subj_expected_regular}회)</h6>"
+                                        f"<span style='font-size:1.05rem; color:#333;'>"
+                                        f"<b>출석:</b> <span style='color:green;'>{reg_att}</span>회 &nbsp;|&nbsp; "
+                                        f"<b>지각:</b> <span style='color:orange;'>{reg_late}</span>회 &nbsp;|&nbsp; "
+                                        f"<b>결석:</b> <span style='color:red;'>{reg_abs}</span>회</span>"
+                                        f"</div>", unsafe_allow_html=True)
+                        with mc2:
+                            st.markdown(f"<div style='padding:15px; background-color:#E8F5E9; border-radius:10px; border-left:6px solid #43A047; margin-bottom:15px;'>"
+                                        f"<h6 style='margin:0 0 8px 0; color:#43A047;'>🟢 보강 수업 (진행: {ext_total}회)</h6>"
+                                        f"<span style='font-size:1.05rem; color:#333;'>"
+                                        f"<b>출석:</b> <span style='color:green;'>{ext_att}</span>회 &nbsp;|&nbsp; "
+                                        f"<b>지각:</b> <span style='color:orange;'>{ext_late}</span>회 &nbsp;|&nbsp; "
+                                        f"<b>결석:</b> <span style='color:red;'>{ext_abs}</span>회</span>"
+                                        f"</div>", unsafe_allow_html=True)
+            else:
+                st.info("수강 정보가 없습니다.")
 
 # ==========================================
 # 10. 일일 업무 일지 (강사용 스마트 화면)
