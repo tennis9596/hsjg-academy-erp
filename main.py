@@ -2182,12 +2182,10 @@ elif menu == "9. 학생 개인별 종합":
             st.divider()
             col_p1, col_p2 = st.columns([1, 4])
             with col_p1:
-                # 💡 [수정 1] 동명이인 방지를 위해 2번 메뉴와 동일하게 전화번호 뒷자리 꼬리표 부착
                 ph = str(s_info.iloc[1])[-4:] if len(s_info) > 1 else "0000"
                 qr_img = generate_styled_qr(f"{real_name}/{ph}", real_name)
                 st.image(qr_img, width=130)
                 
-                # 💡 [핵심 추가] 프로필 사진 바로 아래에 QR 다운로드 버튼 생성!
                 buf = io.BytesIO()
                 qr_img.save(buf, format="PNG")
                 byte_im = buf.getvalue()
@@ -2247,13 +2245,11 @@ elif menu == "9. 학생 개인별 종합":
                         att_map[day_int].append(status)
                 except: pass
 
-            # 💡 [달력 마법 적용] 일요일부터 시작하도록 파이썬 달력 설정 변경
             calendar.setfirstweekday(calendar.SUNDAY)
             
             d_cols = st.columns(7)
-            # 💡 월화수목금토일 -> 일월화수목금토 변경!
             days_ko = ["일", "월", "화", "수", "목", "금", "토"] 
-            day_colors = ["#D32F2F", "gray", "gray", "gray", "gray", "gray", "#1976D2"] # 빨 검 검 검 검 검 파
+            day_colors = ["#D32F2F", "gray", "gray", "gray", "gray", "gray", "#1976D2"] 
             
             for i, d in enumerate(days_ko): 
                 d_cols[i].markdown(f"<div style='text-align:center; color:{day_colors[i]}; font-size:0.9rem; font-weight:900;'>{d}</div>", unsafe_allow_html=True)
@@ -2267,18 +2263,15 @@ elif menu == "9. 학생 개인별 종합":
                         if day == 0: 
                             st.write("") 
                         else:
-                            # 💡 오늘이 무슨 날인지 확인 (공휴일 여부 체크)
                             target_date = datetime(st.session_state.view_year, st.session_state.view_month, day).date()
                             h_name = kr_holidays.get(target_date)
                             
-                            # 색상 결정: 일요일(0)이나 공휴일이면 무조건 빨간색, 토요일(6)이면 파란색
                             if i == 0 or h_name: num_color = "#D32F2F"
                             elif i == 6: num_color = "#1976D2"
                             else: num_color = "#212121"
                             
                             st.markdown(f"<div style='color:{num_color}; font-weight:800; font-size:1.1rem;'>{day}</div>", unsafe_allow_html=True)
                             
-                            # 💡 공휴일이면 날짜 아래에 작게 빨간색으로 이름 표시 (예: 대체공휴일, 설날)
                             if h_name:
                                 st.markdown(f"<div style='color:#D32F2F; font-size:0.65rem; font-weight:bold; line-height:1; margin-bottom:4px;'>{h_name}</div>", unsafe_allow_html=True)
                             
@@ -2290,21 +2283,18 @@ elif menu == "9. 학생 개인별 종합":
                                     elif s == '결석': st.markdown(f"<span style='color:red; font-size:0.8rem; font-weight:bold;'>🔴 결석</span>", unsafe_allow_html=True)
                             else: st.markdown("<br>", unsafe_allow_html=True)
             
-            if att_map:
-                # 💡 [여기서부터 끝까지 싹 덮어쓰기]
+            # 여기서부터 찌꺼기로 남았던 에러 부분이 완벽하게 정리되었습니다!
             st.markdown("---")
             st.markdown("##### 📊 과목별 이달의 출결 요약")
             
             if not df_e.empty and not df_c.empty:
                 if '상태' not in df_e.columns: df_e['상태'] = '수강중'
                 
-                # 1. 이 학생이 수강했던(또는 수강중인) 반의 과목 매핑 만들기
                 my_all_enrolls = df_e[df_e.iloc[:,0] == real_name]
                 class_to_subj = {}
                 for _, r in my_all_enrolls.iterrows():
-                    class_to_subj[r.iloc[2]] = r.iloc[1] # 반이름 -> 과목
+                    class_to_subj[r.iloc[2]] = r.iloc[1] 
                 
-                # 현재 수강 중인 반을 과목별로 묶기
                 active_enrolls = my_all_enrolls[my_all_enrolls['상태'] != '수강종료']
                 active_subjects = list(set(active_enrolls.iloc[:,1].tolist()))
                 
@@ -2320,14 +2310,12 @@ elif menu == "9. 학생 개인별 종합":
                         my_att = df_a[df_a.iloc[:,2] == real_name]
                         my_month_att = my_att[my_att.iloc[:,0].astype(str).str.contains(target_ym)]
                     
-                    # 💡 과목별로 루프를 돌면서 카드를 생성합니다!
                     for subj in sorted(active_subjects):
                         st.markdown(f"###### 🏷️ **{subj}**")
                         
                         subj_expected_regular = 0
                         subj_regular_days = []
                         
-                        # 해당 과목의 반 시간표 추출
                         subj_classes = active_enrolls[active_enrolls.iloc[:,1] == subj].iloc[:,2].tolist()
                         for c in subj_classes:
                             c_info = df_c[df_c.iloc[:,0] == c]
@@ -2340,7 +2328,6 @@ elif menu == "9. 학생 개인별 종합":
                                         subj_regular_days.append(days_in_class)
                                     except: pass
                         
-                        # 해당 과목의 이번 달 정규수업 총 예정 횟수 계산 (일요일, 공휴일 제외)
                         for day in range(1, last_day + 1):
                             target_date = datetime(st.session_state.view_year, st.session_state.view_month, day).date()
                             if target_date.weekday() == 6: continue 
@@ -2351,7 +2338,6 @@ elif menu == "9. 학생 개인별 종합":
                                 if target_yoil in cls_days:
                                     subj_expected_regular += 1
                         
-                        # 해당 과목의 실제 출결 기록만 추출
                         subj_statuses = []
                         if not my_month_att.empty:
                             for _, r in my_month_att.iterrows():
@@ -2359,18 +2345,15 @@ elif menu == "9. 학생 개인별 종합":
                                 if class_to_subj.get(att_c_name) == subj:
                                     subj_statuses.append(r.iloc[3])
                                     
-                        # 정규 출결 계산
                         reg_att = sum(1 for s in subj_statuses if "추가" not in s and any(k in s for k in ['출석', '입실', '조퇴(사유인정)']))
                         reg_late = sum(1 for s in subj_statuses if "추가" not in s and "지각" in s)
                         reg_abs = sum(1 for s in subj_statuses if "추가" not in s and ("결석" in s or "무단 조퇴" in s))
                         
-                        # 추가(보강) 출결 계산
                         ext_total = sum(1 for s in subj_statuses if "추가" in s)
                         ext_att = sum(1 for s in subj_statuses if "추가" in s and any(k in s for k in ['출석', '조퇴(사유인정)']))
                         ext_late = sum(1 for s in subj_statuses if "추가" in s and "지각" in s)
                         ext_abs = sum(1 for s in subj_statuses if "추가" in s and ("결석" in s or "무단 조퇴" in s))
                         
-                        # 화면 표시 (과목별로 나란히 카드 배치)
                         mc1, mc2 = st.columns(2)
                         with mc1:
                             st.markdown(f"<div style='padding:15px; background-color:#E3F2FD; border-radius:10px; border-left:6px solid #1565C0; margin-bottom:15px;'>"
