@@ -657,7 +657,7 @@ if menu == "🏠 대시보드":
 
     
 
-    # 4. 실시간 출결 관제 (경고창)
+    ## 4. 실시간 출결 관제 (경고창)
     col_alert, col_list = st.columns([1.2, 1])
     
     with col_alert:
@@ -670,12 +670,15 @@ if menu == "🏠 대시보드":
                 st.toast("🚨 새로운 미등원(지각 의심) 학생이 감지되었습니다! 데스크 연락 바랍니다.", icon="🚨")
                 st.session_state.last_action_req = len(action_required)
                 
-            for sn, cname, c_tea, tm, sph, pph in action_required:
+            # 💡 [핵심 수정] enumerate를 사용해 고유 번호(idx)를 발급하여 중복 에러 완벽 차단!
+            for idx, (sn, cname, c_tea, tm, sph, pph) in enumerate(action_required):
                 with st.container(border=True):
                     c_text, c_btn = st.columns([3, 1])
                     c_text.markdown(f"**[{cname}] {sn} 학생** (담당: :blue[{c_tea}] / 시작: {tm})")
                     c_text.caption(f"학생📱: {sph} | 부모님📞: {pph}")
-                    if c_btn.button("결석 확정", key=f"btn_abs_{sn}_{cname}", type="primary"):
+                    
+                    # 버튼 key에 시작시간(tm)과 번호표(idx)를 붙여줍니다.
+                    if c_btn.button("결석 확정", key=f"btn_abs_{sn}_{cname}_{tm}_{idx}", type="primary"):
                         add_data('attendance', {'날짜': target_str, '반이름': cname, '학생': sn, '상태': '결석', '비고': '관리자 수동 확정'})
                         show_center_message(f"{sn} 결석 처리 완료!")
                         st.rerun()
@@ -691,6 +694,48 @@ if menu == "🏠 대시보드":
                 st.error(f"**[결석]** {sn} | {cname} (담당: {c_tea}) | 시작: {tm}")
 
     st.divider()
+
+    # 💡 [핵심 추가] 주말 자기주도학습 대시보드 자동 연동 (해당 날짜에만 등장!)
+    df_ws = load_data('weekend_study')
+    if not df_ws.empty and '날짜' in df_ws.columns:
+        today_ws = df_ws[df_ws['날짜'].astype(str) == target_str]
+        if not today_ws.empty:
+            st.markdown(f"##### 📚 오늘의 주말 자기주도학습 대상자 및 실시간 현황")
+            
+            math_ws = today_ws[today_ws['과목'] == '수학']['학생명'].tolist()
+            eng_ws = today_ws[today_ws['과목'] == '영어']['학생명'].tolist()
+            
+            c_m, c_e = st.columns(2)
+            
+            def render_ws_card(title, color_bg, color_border, std_list, subject):
+                if not std_list: return ""
+                html = f"<div style='background-color:{color_bg}; padding:15px; border-radius:10px; border-left:5px solid {color_border}; margin-bottom:10px;'>"
+                html += f"<h6 style='color:{color_border}; margin:0 0 10px 0;'>{title} ({len(std_list)}명)</h6>"
+                
+                for s in sorted(std_list):
+                    # 키오스크에서 찍힌 출결 상태 확인 (예: 주말자기주도(수학))
+                    status = att_map.get((s, f"주말자기주도({subject})"), "")
+                    
+                    if status == "입실" or "지각(입실)" in status:
+                        badge = "<span style='color:white; background-color:#FF9800; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;'>🏃 진행중 (타이머 작동)</span>"
+                    elif "출석" in status or "출석(추가)" in status:
+                        badge = "<span style='color:white; background-color:#4CAF50; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;'>✅ 120분 완료</span>"
+                    else:
+                        badge = "<span style='color:#666; background-color:#E0E0E0; padding:2px 6px; border-radius:4px; font-size:0.7rem; margin-left:5px;'>⏳ 등원 대기</span>"
+                        
+                    html += f"<div style='margin-bottom:6px; font-size:0.95rem; font-weight:600;'>• {s} {badge}</div>"
+                
+                html += "</div>"
+                return html
+
+            with c_m:
+                if math_ws: st.markdown(render_ws_card("📘 수학 자습 대상", "#E3F2FD", "#1565C0", math_ws, "수학"), unsafe_allow_html=True)
+            with c_e:
+                if eng_ws: st.markdown(render_ws_card("📙 영어 자습 대상", "#FFF3E0", "#E65100", eng_ws, "영어"), unsafe_allow_html=True)
+            
+            st.divider()
+
+    # 5. 시간표 렌더링
     
     # 5. 시간표 렌더링
     st.markdown(f"##### 📅 {selected_date.month}/{selected_date.day} 강의실 배정 현황 및 수강 명단")
@@ -796,48 +841,35 @@ elif menu == "1. 강사 관리":
                 prev_ph = row.iloc[2] if len(row) > 2 else ""
                 prev_email = row.iloc[3] if len(row) > 3 else ""
                 
-                # 구글 시트에 아직 '주소'나 '비밀번호' 열이 없을 수도 있으니 안전하게 가져오기
                 prev_addr = row.get('주소', '')
                 if pd.isna(prev_addr): prev_addr = ""
                 
                 prev_pw = row.get('비밀번호', '')
                 if pd.isna(prev_pw): prev_pw = ""
 
-                n_name = st.text_input("이름", value=prev_name, key="edit_t_n")
-                n_sub = st.text_input("과목", value=prev_sub, key="edit_t_s")
-                n_ph = st.text_input("연락처", value=prev_ph, key="edit_t_p")
-                n_email = st.text_input("이메일", value=prev_email, key="edit_t_e")
-                n_addr = st.text_input("주소", value=prev_addr, key="edit_t_addr") # <-- 주소 추가!
-                n_pw = st.text_input("비밀번호", value=prev_pw, key="edit_t_pw")
-                
-                c1, c2 = st.columns(2)
-                
-                if c1.button("💾 수정 저장"):
-                    st.session_state['confirm_action'] = 'update_teacher'
-                
-                if st.session_state.get('confirm_action') == 'update_teacher':
-                    st.warning(f"⚠️ 정말로 '{selected_t}' 선생님 정보를 수정하시겠습니까?")
-                    col_y, col_n = st.columns([1,1])
-                    if col_y.button("네, 수정합니다", type="primary"):
-                        update_data('teachers', '이름', selected_t, {
-                            '이름': n_name, 
-                            '과목': n_sub, 
-                            '연락처': n_ph, 
-                            '이메일': n_email, 
-                            '주소': n_addr,  # <-- 주소 추가!
-                            '비밀번호': n_pw
-                        })
-                        st.session_state['confirm_action'] = None
-                        st.session_state['t_modify_idx'] = 0
-                        show_center_message("수정 완료!")
-                        for key in ["edit_t_n", "edit_t_s", "edit_t_p", "edit_t_e", "edit_t_addr", "edit_t_pw"]:
-                            if key in st.session_state: del st.session_state[key]
-                        time.sleep(1); st.rerun()
-                    if col_n.button("취소"):
-                        st.session_state['confirm_action'] = None
-                        st.rerun()
+                # 🛡️ [핵심 수정] 강사 정보 수정을 폼으로 묶어서 로딩 방어!
+                with st.form(f"edit_teacher_form_{selected_t}", clear_on_submit=False):
+                    n_name = st.text_input("이름", value=prev_name)
+                    n_sub = st.text_input("과목", value=prev_sub)
+                    n_ph = st.text_input("연락처", value=prev_ph)
+                    n_email = st.text_input("이메일", value=prev_email)
+                    n_addr = st.text_input("주소", value=prev_addr) 
+                    n_pw = st.text_input("비밀번호", value=prev_pw)
+                    
+                    submit_edit = st.form_submit_button("💾 정보 업데이트", type="primary", use_container_width=True)
+                    
+                if submit_edit:
+                    update_data('teachers', '이름', selected_t, {
+                        '이름': n_name, '과목': n_sub, '연락처': n_ph, 
+                        '이메일': n_email, '주소': n_addr, '비밀번호': n_pw
+                    })
+                    st.session_state['t_modify_idx'] = 0
+                    show_center_message(f"{n_name} 강사님 정보 수정 완료!")
+                    time.sleep(1); st.rerun()
 
-                if c2.button("🗑️ 삭제하기"):
+                st.divider()
+                
+                if st.button("🗑️ 삭제하기"):
                     st.session_state['confirm_action'] = 'delete_teacher'
                 
                 if st.session_state.get('confirm_action') == 'delete_teacher':
@@ -1025,37 +1057,31 @@ elif menu == "2. 학생 관리":
                 row = df_s[df_s.iloc[:,0] == real_n].iloc[0]
                 st.divider()
                 st.markdown(f"##### 🔧 '{real_n}' 학생 정보 및 상태 수정")
-                sc1, sc2 = st.columns(2)
-                u_nm = sc1.text_input("이름", value=row.iloc[0], key=f"u_sn_{real_n}")
-                u_hp = sc1.text_input("학생 폰", value=row.iloc[1], key=f"u_sp_{real_n}")
-                u_pp = sc1.text_input("부모 폰", value=row.iloc[2], key=f"u_spp_{real_n}")
-                grs = ["초4","초5","초6","중1","중2","중3","고1","고2","고3"]
-                cur_g = row.iloc[3]
-                u_gr = sc2.selectbox("학년", grs, index=grs.index(cur_g) if cur_g in grs else 0, key=f"u_sg_{real_n}")
-                u_sc = sc2.text_input("학교", value=row.iloc[4], key=f"u_ssc_{real_n}")
                 
-                # [수정] 기존 상태값 불러오기 및 '졸업' 항목 추가!
-                cur_stat = str(row.get('상태', '재원'))
-                if cur_stat not in ["재원", "휴원", "퇴원", "졸업"]: cur_stat = "재원"
-                u_stat = sc2.selectbox("상태 변경 (퇴원/졸업 처리)", ["재원", "휴원", "퇴원", "졸업"], index=["재원", "휴원", "퇴원", "졸업"].index(cur_stat), key=f"u_stat_{real_n}")
+                # 🛡️ [핵심 수정] 학생 정보 수정을 폼으로 묶어서 로딩 방어!
+                with st.form(f"edit_student_form_{real_n}", clear_on_submit=False):
+                    sc1, sc2 = st.columns(2)
+                    u_nm = sc1.text_input("이름", value=row.iloc[0])
+                    u_hp = sc1.text_input("학생 폰", value=row.iloc[1])
+                    u_pp = sc1.text_input("부모 폰", value=row.iloc[2])
+                    grs = ["초4","초5","초6","중1","중2","중3","고1","고2","고3"]
+                    cur_g = row.iloc[3]
+                    u_gr = sc2.selectbox("학년", grs, index=grs.index(cur_g) if cur_g in grs else 0)
+                    u_sc = sc2.text_input("학교", value=row.iloc[4])
+                    
+                    cur_stat = str(row.get('상태', '재원'))
+                    if cur_stat not in ["재원", "휴원", "퇴원", "졸업"]: cur_stat = "재원"
+                    u_stat = sc2.selectbox("상태 변경 (퇴원/졸업 처리)", ["재원", "휴원", "퇴원", "졸업"], index=["재원", "휴원", "퇴원", "졸업"].index(cur_stat))
 
-                st.markdown("---")
-                if st.button("💾 정보 및 상태 업데이트", type="primary", use_container_width=True):
-                    st.session_state['confirm_action'] = 'update_student'
+                    st.markdown("---")
+                    submit_std_edit = st.form_submit_button("💾 정보 및 상태 업데이트", type="primary", use_container_width=True)
                 
-                if st.session_state.get('confirm_action') == 'update_student':
-                    st.warning(f"⚠️ '{real_n}' 학생의 정보를 수정하시겠습니까?")
-                    col_y, col_n = st.columns([1,1])
-                    if col_y.button("네, 수정합니다", type="primary"):
-                        nd = {'이름': u_nm, '연락처': u_hp, '학부모연락처': u_pp, '학년': u_gr, '학교': u_sc, '상태': u_stat}
-                        update_data('students', '이름', real_n, nd)
-                        st.session_state['confirm_action'] = None
-                        show_center_message("수정 완료!")
-                        if 's_search_edit' in st.session_state: del st.session_state['s_search_edit']
-                        time.sleep(1); st.rerun()
-                    if col_n.button("취소"):
-                        st.session_state['confirm_action'] = None
-                        st.rerun()
+                if submit_std_edit:
+                    nd = {'이름': u_nm, '연락처': u_hp, '학부모연락처': u_pp, '학년': u_gr, '학교': u_sc, '상태': u_stat}
+                    update_data('students', '이름', real_n, nd)
+                    show_center_message(f"{u_nm} 학생 수정 완료!")
+                    if 's_search_edit' in st.session_state: del st.session_state['s_search_edit']
+                    time.sleep(1); st.rerun()
 
                 st.divider()
                 st.caption("⚠️ 테스트 데이터를 지우거나 실수로 등록한 경우에만 아래 삭제 버튼을 사용하세요. 그만둔 학생은 위에서 상태를 '퇴원'이나 '졸업'으로 변경하는 것이 안전합니다.")
@@ -1303,21 +1329,19 @@ elif menu == "3. 반 관리":
                         st.rerun()
 
 # ==========================================
-# 4. 수강 배정 (수강종료 타임라인 보존 기능 적용)
+# 4. 수강 배정 (클릭 앤 패스 일괄 배정 시스템)
 # ==========================================
 elif menu == "4. 수강 배정":
-    st.subheader("🔗 수강 배정 관리")
+    st.subheader("🔗 스마트 수강 배정 관리")
     
     df_e = load_data('enrollments')
     df_s = load_data('students')
     df_t = load_data('teachers')
     df_c = load_data('classes')
 
-    if 'draft_enrolls' not in st.session_state: st.session_state.draft_enrolls = []
-    if 'confirm_save_cart' not in st.session_state: st.session_state.confirm_save_cart = False
     if 'confirm_cancel_target' not in st.session_state: st.session_state.confirm_cancel_target = None
 
-    # [핵심 내부 함수] 지우개 대신 빨간펜(수강종료)을 칠하는 함수
+    # 지우개 대신 빨간펜(수강종료)을 칠하는 함수
     def cancel_class_soft(student_name, class_name):
         try:
             client = init_connection()
@@ -1344,12 +1368,11 @@ elif menu == "4. 수강 배정":
             st.error(f"수강 종료 처리 실패: {e}")
             return False
 
-    tab1, tab2 = st.tabs(["📋 전체 수강 현황", "➕ 수강 신청 (장바구니)"])
+    tab1, tab2 = st.tabs(["📋 전체 수강 현황", "🛒 반 기준 일괄 배정 (클릭 앤 패스)"])
 
     with tab1:
         if df_e.empty: st.info("현재 배정된 수강 내역이 없습니다.")
         else: 
-            # '수강종료'가 아닌 현재 '수강중'인 목록만 보여줌
             if '상태' not in df_e.columns: df_e['상태'] = '수강중'
             active_e = df_e[df_e['상태'] != '수강종료']
             st.dataframe(active_e[['학생', '과목', '반이름', '담당강사', '날짜']], use_container_width=True)
@@ -1358,131 +1381,107 @@ elif menu == "4. 수강 배정":
         if df_s.empty or df_t.empty or df_c.empty:
             st.warning("학생, 강사, 반 데이터가 모두 있어야 배정이 가능합니다.")
         else:
-            c_left, c_right = st.columns([1, 1.2])
-            with c_left:
-                st.markdown("### 1️⃣ 학생 선택")
-                df_s['L'] = df_s.iloc[:,0] + " (" + df_s.iloc[:,4] + ")" 
-                s_list = df_s['L'].tolist()
-                sel_student_label = st.selectbox("학생을 선택하세요", s_list, key="assign_sel_std")
-
-                if sel_student_label:
-                    real_name = sel_student_label.split(' (')[0]
-                    s_info = df_s[df_s.iloc[:,0] == real_name].iloc[0]
-                    st.success(f"👤 **{s_info.iloc[0]}** ({s_info.iloc[3]})")
-                    
-                    st.divider()
-                    st.markdown("### 2️⃣ 수업 담기")
-                    all_subjects = sorted(get_col_data(df_t, '과목', 1).unique().tolist())
-                    sel_subj = st.selectbox("과목 선택", ["(선택하세요)"] + all_subjects)
-                    
-                    if sel_subj != "(선택하세요)":
-                        sub_teachers = df_t[df_t.iloc[:, 1] == sel_subj].iloc[:, 0].tolist()
-                        if not sub_teachers: st.error("해당 과목의 강사가 없습니다.")
-                        else:
-                            sel_tea = st.selectbox("강사 선택", ["(선택하세요)"] + sub_teachers)
-                            if sel_tea and sel_tea != "(선택하세요)":
-                                t_classes = df_c[df_c.iloc[:, 1].str.contains(sel_tea)]
-                                if t_classes.empty: st.error("해당 강사의 개설된 반이 없습니다.")
-                                else:
-                                    cls_opts = [f"{r.iloc[0]} ({r.iloc[2]})" for _, r in t_classes.iterrows()]
-                                    sel_cls_full = st.selectbox("반 선택", ["(선택하세요)"] + cls_opts)
-                                    if sel_cls_full and sel_cls_full != "(선택하세요)":
-                                        real_cls_name = sel_cls_full.split(' (')[0]
-                                        if st.button("⬇️ 장바구니에 담기", type="primary"):
-                                            is_exist = False
-                                            for item in st.session_state.draft_enrolls:
-                                                if item['학생'] == real_name and item['반이름'] == real_cls_name and item['과목'] == sel_subj: is_exist = True
-                                            if not df_e.empty:
-                                                try:
-                                                    # 이미 수강중인지 확인 (수강종료된 반은 다시 담을 수 있음)
-                                                    already = df_e[(df_e.iloc[:,0]==real_name) & (df_e.iloc[:,1]==sel_subj) & (df_e.iloc[:,2]==real_cls_name) & (df_e.get('상태', '') != '수강종료')]
-                                                    if not already.empty: is_exist = True
-                                                except: pass
-                                            if is_exist: st.warning("이미 담겼거나 수강 중인 수업입니다.")
-                                            else:
-                                                st.session_state.draft_enrolls.append({
-                                                    '학생': real_name, '과목': sel_subj, '반이름': real_cls_name,
-                                                    '담당강사': sel_tea, '날짜': str(datetime.today().date()),
-                                                    '상태': '수강중', '종료일': '' # 새로운 데이터 등록 시 기본값
-                                                })
-                                                st.rerun()
-
-            with c_right:
-                st.markdown(f"### 🛒 수강 신청 목록 ({len(st.session_state.draft_enrolls)}건)")
-                if st.session_state.draft_enrolls:
-                    for i, item in enumerate(st.session_state.draft_enrolls):
-                        with st.container():
-                            cc1, cc2 = st.columns([4, 1])
-                            cc1.markdown(f"**{item['학생']}** - :blue[[{item['과목']}]] {item['반이름']} ({item['담당강사']})")
-                            if cc2.button("삭제", key=f"draft_del_{i}"):
-                                del st.session_state.draft_enrolls[i]
-                                st.rerun()
-                    st.divider()
-                    if not st.session_state.confirm_save_cart:
-                        if st.button("💾 전체 저장하기 (배정 확정)", type="primary", use_container_width=True):
-                            st.session_state.confirm_save_cart = True
-                            st.rerun()
+            st.markdown("### 1️⃣ 배정할 수업(반) 먼저 선택")
+            c1, c2, c3 = st.columns(3)
+            all_subjects = sorted(get_col_data(df_t, '과목', 1).unique().tolist())
+            sel_subj = c1.selectbox("📘 과목 선택", ["(선택)"] + all_subjects)
+            
+            if sel_subj != "(선택)":
+                sub_teachers = df_t[df_t.iloc[:, 1] == sel_subj].iloc[:, 0].tolist()
+                sel_tea = c2.selectbox("👨‍🏫 강사 선택", ["(선택)"] + sub_teachers)
+                
+                if sel_tea != "(선택)":
+                    t_classes = df_c[df_c.iloc[:, 1].str.contains(sel_tea)]
+                    if t_classes.empty: 
+                        c3.error("개설된 반이 없습니다.")
                     else:
-                        st.warning(f"⚠️ 총 {len(st.session_state.draft_enrolls)}건의 수업을 배정하시겠습니까?")
-                        col_y, col_n = st.columns([1, 1])
-                        if col_y.button("네, 저장합니다", type="primary", use_container_width=True):
-                            add_data_bulk('enrollments', st.session_state.draft_enrolls)
-                            st.session_state.draft_enrolls = []
-                            st.session_state.confirm_save_cart = False
-                            show_center_message("✅ 배정 완료!")
-                            time.sleep(1.5); st.rerun()
-                        if col_n.button("취소", use_container_width=True):
-                            st.session_state.confirm_save_cart = False
-                            st.rerun()
-                else: st.info("왼쪽에서 수업을 선택하고 '담기'를 눌러주세요.")
-
-                if sel_student_label:
-                    st.markdown("---")
-                    st.markdown("#### 📋 현재 수강 중인 수업")
-                    real_name_curr = sel_student_label.split(' (')[0]
-                    if not df_e.empty:
-                        try:
-                            # 현재 수강중인(수강종료가 아닌) 수업만 표시
-                            if '상태' not in df_e.columns: df_e['상태'] = '수강중'
-                            curr_list = df_e[(df_e.iloc[:,0] == real_name_curr) & (df_e['상태'] != '수강종료')]
+                        cls_opts = [f"{r.iloc[0]} ({r.iloc[2]})" for _, r in t_classes.iterrows()]
+                        sel_cls_full = c3.selectbox("🏫 반 선택", ["(선택)"] + cls_opts)
+                        
+                        if sel_cls_full != "(선택)":
+                            real_cls_name = sel_cls_full.split(' (')[0]
+                            st.divider()
                             
-                            if not curr_list.empty:
-                                for idx, row in curr_list.iterrows():
-                                    subj_val, cls_val, tea_val = row.iloc[1], row.iloc[2], row.iloc[3]
-                                    unique_key = f"{real_name_curr}_{cls_val}_{subj_val}"
-                                    c1, c2 = st.columns([4, 1.2])
-                                    c1.markdown(f"• :blue[[{subj_val}]] {cls_val} (담당: {tea_val})")
+                            # 데이터 정리 로직
+                            df_s['L'] = df_s.iloc[:,0] + " (" + df_s.iloc[:,3].astype(str) + ")" 
+                            all_students_labels = df_s['L'].tolist()
+                            
+                            already_enrolled = []
+                            if not df_e.empty:
+                                if '상태' not in df_e.columns: df_e['상태'] = '수강중'
+                                already_df = df_e[(df_e.iloc[:,2] == real_cls_name) & (df_e['상태'] != '수강종료')]
+                                already_enrolled_names = already_df.iloc[:,0].tolist()
+                                already_enrolled = [lbl for lbl in all_students_labels if lbl.split(' (')[0] in already_enrolled_names]
+                                
+                            available_students = [s for s in all_students_labels if s not in already_enrolled]
+                            
+                            # 💡 클릭 앤 패스 UI 구현부 (이전 코드의 col_left, col_right 부분을 통째로 덮어쓰세요!)
+                            st.markdown(f"### 2️⃣ [{real_cls_name}] 반에 학생 일괄 배정")
+                            
+                            # 🛡️ [핵심 수정] st.form 방어막 전개! (학생을 몇 명을 고르든 로딩 없음)
+                            with st.form("bulk_enroll_form", clear_on_submit=True):
+                                st.info("💡 **아래 빈칸을 클릭**하여 배정할 학생들을 마음껏 선택하세요! (마지막 '확정' 버튼을 누르기 전까지 로딩되지 않습니다 🚀)")
+                                selected_stds_labels = st.multiselect(
+                                    "배정 대기 장바구니", 
+                                    available_students, 
+                                    placeholder="여기를 눌러 학생들을 다중 선택하세요 👇"
+                                )
+                                
+                                submit_btn = st.form_submit_button("💾 선택한 학생들 일괄 배정 확정", type="primary", use_container_width=True)
+                                
+                                if submit_btn:
+                                    if not selected_stds_labels:
+                                        st.warning("선택된 학생이 없습니다.")
+                                    else:
+                                        enroll_data = []
+                                        for s_lbl in selected_stds_labels:
+                                            r_name = s_lbl.split(' (')[0]
+                                            enroll_data.append({
+                                                '학생': r_name, '과목': sel_subj, '반이름': real_cls_name,
+                                                '담당강사': sel_tea, '날짜': str(datetime.today().date()),
+                                                '상태': '수강중', '종료일': ''
+                                            })
+                                        add_data_bulk('enrollments', enroll_data)
+                                        show_center_message(f"✅ {len(enroll_data)}명 수강 배정 완료!")
+                                        time.sleep(1.5)
+                                        st.rerun()
+                                        
+                            st.divider()
+                            # 이미 배정된 학생들을 조회하고 바로 뺄 수 있는(수강종료) 명단
+                            st.markdown(f"#### 📋 현재 [{real_cls_name}] 수강 중인 명단 ({len(already_enrolled)}명)")
+                            if already_enrolled:
+                                for ae in already_enrolled:
+                                    ae_name = ae.split(' (')[0]
+                                    c_a, c_b = st.columns([3, 1])
+                                    c_a.markdown(f"• **{ae}**")
                                     
+                                    unique_key = f"cancel_{ae_name}_{real_cls_name}"
                                     if st.session_state.confirm_cancel_target != unique_key:
-                                        if c2.button("수강종료", key=f"btn_cancel_{unique_key}"):
+                                        if c_b.button("수강종료", key=f"btn_{unique_key}"):
                                             st.session_state.confirm_cancel_target = unique_key
                                             st.rerun()
                                     else:
-                                        with c2:
-                                            st.markdown("**:red[종료확인?]**")
+                                        with c_b:
+                                            st.markdown("**:red[종료 확인?]**")
                                             y_col, n_col = st.columns(2)
                                             if y_col.button("네", key=f"yes_{unique_key}"):
-                                                # [핵심] 완전 삭제(delete) 대신 상태 변경(cancel_class_soft) 실행
-                                                cancel_class_soft(real_name_curr, cls_val)
+                                                cancel_class_soft(ae_name, real_cls_name)
                                                 st.session_state.confirm_cancel_target = None
-                                                show_center_message("수강 종료 처리 완료!")
+                                                show_center_message(f"{ae_name} 수강 종료 완료!")
                                                 time.sleep(1); st.rerun()
                                             if n_col.button("아니오", key=f"no_{unique_key}"):
                                                 st.session_state.confirm_cancel_target = None
                                                 st.rerun()
-                            else: st.caption("현재 수강 중인 수업이 없습니다.")
-                        except: st.caption("데이터 로드 중...")
-                    else: st.caption("현재 수강 중인 수업이 없습니다.")
+                            else:
+                                st.caption("아직 이 반에 배정된 학생이 없습니다.")
 
 # ==========================================
-# 5. QR 키오스크(출석) - 이중 스캔(등/하원) 방어 시스템 및 UI/UX 강화
+# 5. QR 키오스크(출석) - 주말 2시간 락(Lock) 기능 탑재
 # ==========================================
 elif menu == "5. QR 키오스크(출석)":
     
-    # [수정 1] CSS 마법: 스트림릿 카메라 버튼을 강제로 거대하게 만듭니다!
     st.markdown("""
     <style>
-    /* 카메라 촬영 버튼 짱 크게 만들기 */
     [data-testid="stCameraInput"] button {
         min-height: 80px !important;
         font-size: 24px !important;
@@ -1494,7 +1493,6 @@ elif menu == "5. QR 키오스크(출석)":
         box-shadow: 0px 4px 10px rgba(0,0,0,0.2) !important;
         margin-top: 10px !important;
     }
-    /* 버튼을 눌렀을 때(호버) 색상 변화 */
     [data-testid="stCameraInput"] button:hover {
         background-color: #D32F2F !important;
         transform: scale(1.02) !important;
@@ -1521,7 +1519,6 @@ elif menu == "5. QR 키오스크(출석)":
             if not decoded:
                 st.error("❌ QR코드가 인식되지 않았습니다. 밝은 곳에서 화면에 꽉 차게 다시 찍어주세요.")
             else:
-                # 💡 [수정 포인트] QR 데이터 "홍길동/1234" 에서 '/' 앞부분인 "홍길동"만 잘라냅니다!
                 raw_qr_data = decoded[0].data.decode('utf-8').strip()
                 student_name = raw_qr_data.split('/')[0].strip()
                 
@@ -1530,19 +1527,31 @@ elif menu == "5. QR 키오스크(출석)":
                 df_a = load_data('attendance')
                 
                 days_ko = ["월", "화", "수", "목", "금", "토", "일"]
+                now = datetime.now()
                 today_str = days_ko[now.weekday()]
                 td_date = str(now.date())
                 
+                # 💡 1. 오늘 주말 자습 명단에 이 아이가 있는지 확인!
+                df_ws = load_data('weekend_study')
+                is_weekend_study = False
+                ws_subject = ""
+                if not df_ws.empty and '학생명' in df_ws.columns:
+                    my_ws = df_ws[(df_ws['날짜'].astype(str) == td_date) & (df_ws['학생명'] == student_name)]
+                    if not my_ws.empty:
+                        is_weekend_study = True
+                        ws_subject = my_ws.iloc[0].get('과목', '공통')
+                
+                # 2. 오늘 듣는 정규/보강 수업 시간 전부 긁어모으기
                 my_classes = []
                 if not df_e.empty:
                     if '상태' not in df_e.columns: df_e['상태'] = '수강중'
-                    # 💡 [핵심 수정] 예전에 듣다 종료된 반의 시간표에 발목 잡히지 않도록, 수강중인 반만 추출!
                     active_e = df_e[(df_e.iloc[:, 0] == student_name) & (df_e['상태'] != '수강종료')]
                     my_classes = active_e.iloc[:, 2].tolist()
                     
                 today_end_time = None
                 today_start_time = None
-                c_name = "QR출석"
+                total_class_mins = 0
+                c_names_today = []
                 
                 if not df_c.empty:
                     for c in my_classes:
@@ -1556,18 +1565,32 @@ elif menu == "5. QR 키오스크(출석)":
                                         s_str, e_str = tr.split('-')
                                         s_t = datetime.strptime(s_str, "%H:%M").time()
                                         e_t = datetime.strptime(e_str, "%H:%M").time()
+                                        
+                                        # 오늘 수업 분(min) 단위 누적!
+                                        total_class_mins += calc_duration_min(s_str, e_str)
+                                        c_names_today.append(c)
+                                        
                                         if today_end_time is None or e_t > today_end_time:
                                             today_end_time = e_t
                                             today_start_time = s_t
-                                            c_name = c
                                     except: pass
                 
+                # 3. 출결 장부에 남길 수업 목록 통합 (정규 + 주말자습)
+                classes_to_record = list(c_names_today)
+                if is_weekend_study:
+                    classes_to_record.append(f"주말자기주도({ws_subject})")
+                
+                if not classes_to_record:
+                    classes_to_record = ["미배정방문"]
+
+                # 출결 기록 조회 (오늘 기록 중 첫 번째 기준)
+                rep_class = classes_to_record[0]
                 today_records = pd.DataFrame()
                 if not df_a.empty:
-                    today_records = df_a[(df_a.iloc[:,0] == td_date) & (df_a.iloc[:,2] == student_name)]
+                    today_records = df_a[(df_a.iloc[:,0] == td_date) & (df_a.iloc[:,2] == student_name) & (df_a.iloc[:,1] == rep_class)]
                 
                 if today_records.empty:
-                    # [1차 스캔: 등원]
+                    # 🟢 [1차 스캔: 등원]
                     from datetime import timedelta
                     status = "입실"
                     if today_start_time:
@@ -1576,41 +1599,76 @@ elif menu == "5. QR 키오스크(출석)":
                             status = "지각(입실)"
                     
                     memo = f"등원 {now.strftime('%H:%M')}"
-                    add_data_bulk('attendance', [{'날짜': td_date, '반이름': c_name, '학생': student_name, '상태': status, '비고': memo}])
-                    st.success(f"🏫 [{student_name}] 학생, 환영합니다! ({status})")
-                    st.balloons() # 등원은 풍선!
+                    
+                    # 오늘 듣는 모든 반에 똑같이 '입실' 기록 쏴주기
+                    bulk_data = [{'날짜': td_date, '반이름': c, '학생': student_name, '상태': status, '비고': memo} for c in classes_to_record]
+                    add_data_bulk('attendance', bulk_data)
+                    
+                    if is_weekend_study:
+                        target_total = total_class_mins + 120
+                        st.success(f"📚 [{student_name}] 학생, 환영합니다! 오늘 목표 체류시간은 총 {target_total}분입니다. 화이팅! 🔥")
+                    else:
+                        st.success(f"🏫 [{student_name}] 학생, 환영합니다! ({status})")
+                    st.balloons()
                     
                 else:
-                    # [2차 스캔: 하원]
+                    # 🔴 [2차 스캔: 하원 시도]
                     last_status = today_records.iloc[-1]['상태']
+                    last_memo = today_records.iloc[-1].get('비고', '')
                     
                     if last_status in ["입실", "지각(입실)"]:
                         can_leave = True
+                        lock_reason = ""
+                        
+                        # 방어막 1: 정규 수업 종료 시간 체크
                         if today_end_time:
                             from datetime import timedelta
                             allowed_time = datetime.combine(now.date(), today_end_time) - timedelta(minutes=10)
                             if now < allowed_time:
                                 can_leave = False
+                                lock_reason = f"정규 수업이 아직 끝나지 않았습니다. (종료 예정: {today_end_time.strftime('%H:%M')})"
+                        
+                        # 방어막 2: 총 체류 시간 체크 (자기주도학습 120분 추가)
+                        if is_weekend_study:
+                            try:
+                                enter_time_str = last_memo.split()[1] 
+                                eh, em = map(int, enter_time_str.split(':'))
+                                enter_dt = datetime.combine(now.date(), datetime.min.time()).replace(hour=eh, minute=em)
+                                elapsed_mins = (now - enter_dt).total_seconds() / 60
+                                
+                                target_mins = total_class_mins + 120
+                                
+                                if elapsed_mins < target_mins - 10: # 10분 정도의 여유는 줍니다
+                                    can_leave = False
+                                    remain_mins = int(target_mins - elapsed_mins)
+                                    if not lock_reason: # 정규 수업으로 안 막혔다면 자습 시간으로 팩트폭행
+                                        lock_reason = f"아직 자기주도학습 목표를 채우지 못했습니다! (총 {target_mins}분 중 {int(elapsed_mins)}분 경과, {remain_mins}분 남음 🪑)"
+                            except: pass
                         
                         if not can_leave:
-                            st.error(f"🚫 [{student_name}] 학생, 아직 하원 시간이 아닙니다! (수업 종료 10분 전부터 가능)")
-                            st.warning("일찍 귀가해야 하는 긴급 상황이라면 선생님께 말씀해주세요.")
+                            st.error(f"🚫 [{student_name}] 학생, 아직 집에 갈 수 없습니다!")
+                            st.warning(lock_reason)
                         else:
-                            final_status = "출석" if last_status == "입실" else "지각"
                             new_memo = f"하원 {now.strftime('%H:%M')}"
-                            add_data_bulk('attendance', [{'날짜': td_date, '반이름': c_name, '학생': student_name, '상태': final_status, '비고': new_memo}])
+                            bulk_data = []
+                            # 나갈 때도 모든 수업 기록에 각각 출석 도장 쾅쾅!
+                            for c in classes_to_record:
+                                final_status = "출석" if last_status == "입실" else "지각"
+                                if "주말자기주도" in c: final_status = "출석(추가)"
+                                bulk_data.append({'날짜': td_date, '반이름': c, '학생': student_name, '상태': final_status, '비고': new_memo})
                             
-                            # [수정 2] 하원 시각 효과 극대화 (엄청 큰 글씨 + 눈 내림 효과!)
+                            add_data_bulk('attendance', bulk_data)
+                            
                             st.markdown(f"""
-                            <div style='background-color: #E3F2FD; padding: 30px; border-radius: 20px; border: 3px solid #64B5F6; text-align: center; box-shadow: 0px 5px 15px rgba(0,0,0,0.1); margin-top: 20px;'>
+                            <div style='background-color: #E3F2FD; padding: 30px; border-radius: 20px; border: 3px solid #64B5F6; text-align: center; margin-top: 20px;'>
                                 <h1 style='color: #1565C0; margin-bottom: 10px; font-size: 36px;'>🏠 하원 처리 완료!</h1>
-                                <h3 style='color: #333;'><b>[{student_name}]</b> 학생, 오늘 하루도 고생했어요!</h3>
+                                <h3 style='color: #333;'><b>[{student_name}]</b> 학생, 오늘 진짜 고생 많았어요!</h3>
                                 <h4 style='color: #555;'>조심히 들어가세요 👋</h4>
                             </div>
                             """, unsafe_allow_html=True)
-                            st.snow() # 하원은 눈!
+                            st.snow()
                             
-                    elif last_status in ["출석", "지각", "결석", "무단 조퇴", "조퇴(사유인정)", "출석(하원태그 누락)"]:
+                    elif last_status in ["출석", "지각", "결석", "무단 조퇴", "조퇴(사유인정)", "출석(하원태그 누락)", "출석(추가)"]:
                         st.info(f"👍 [{student_name}] 학생은 이미 오늘 출결 처리가 완료되었습니다.")
 
         except ImportError:
@@ -1624,11 +1682,12 @@ elif menu == "5. QR 키오스크(출석)":
 elif menu == "6. 출석 관리":
     st.subheader("✅ 출석 관리 및 월간 장부")
     
-    tab1, tab2 = st.tabs(["✅ 일일 수동 출석 체크", "🖨️ 전체 월간 출석부 (인쇄용)"])
+    # 💡 [핵심 수정] 3번째 탭(주말 관제탑) 추가!
+    tab1, tab2, tab3 = st.tabs(["✅ 일일 수동 출석 체크", "🖨️ 전체 월간 출석부 (인쇄용)", "📝 주말 자기주도학습 관제탑"])
     
     df_e = load_data('enrollments')
     df_a = load_data('attendance')
-    df_c = load_data('classes') # 💡 [추가] 강사의 담당 반을 찾기 위해 classes 데이터도 불러옵니다.
+    df_c = load_data('classes')
     
     # --- [Tab 1] 일일 수동 출석 체크 (기존 데이터 불러오기 및 강사별 맞춤 필터 적용) ---
     with tab1:
@@ -1837,6 +1896,160 @@ elif menu == "6. 출석 관리":
                             height=60
                         )
                         st.markdown(html, unsafe_allow_html=True)
+
+    # --- [Tab 3] 주말 자기주도학습 관제탑 (자동 추출, 횟수 카운트 및 키오스크 연동) ---
+    with tab3:
+        st.markdown("### 📝 주말 자기주도학습 관제탑")
+        st.caption("이번 주 평일의 결석/지각생 명단과 횟수가 자동으로 표시됩니다. 필요시 명단을 편집(추가/제외)하세요.")
+        
+        if df_e.empty or df_a.empty:
+            st.info("아직 출결 및 수강 데이터가 부족합니다.")
+        else:
+            c_week, c_m_day, c_e_day = st.columns([2, 1, 1])
+            with c_week:
+                today = datetime.today().date()
+                mon_date = today - timedelta(days=today.weekday())
+                sel_mon = st.date_input("조회할 주간의 '월요일' 선택", mon_date)
+            with c_m_day: math_day = st.selectbox("수학 자습 요일", ["토요일", "일요일"], index=0)
+            with c_e_day: eng_day = st.selectbox("영어 자습 요일", ["토요일", "일요일"], index=1)
+            
+            st.divider()
+            
+            # 1. 날짜 및 전체 수강생 명단 기본 세팅
+            weekdays_str = [(sel_mon + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(5)]
+            
+            if '상태' not in df_e.columns: df_e['상태'] = '수강중'
+            active_e = df_e[df_e['상태'] != '수강종료']
+            
+            math_all, eng_all = set(), set()
+            class_to_subj = {}
+            
+            for _, r in active_e.iterrows():
+                subj = str(r.iloc[1])
+                cname = str(r.iloc[2])
+                sname = str(r.iloc[0])
+                class_to_subj[cname] = subj
+                if "수학" in subj: math_all.add(sname)
+                elif "영어" in subj: eng_all.add(sname)
+                
+            math_all_list = sorted(list(math_all))
+            eng_all_list = sorted(list(eng_all))
+            
+            # 2. 학생별 지각/결석 횟수 정밀 카운트
+            math_auto_counts = {}
+            eng_auto_counts = {}
+            
+            target_a = df_a[df_a.iloc[:,0].astype(str).isin(weekdays_str)]
+            
+            for _, r in target_a.iterrows():
+                att_status = str(r.iloc[3])
+                c_name = str(r.iloc[1])
+                s_name = str(r.iloc[2])
+                subj = class_to_subj.get(c_name, "")
+                
+                is_math = "수학" in subj and s_name in math_all
+                is_eng = "영어" in subj and s_name in eng_all
+                
+                if "결석" in att_status or "지각" in att_status:
+                    if is_math:
+                        if s_name not in math_auto_counts: math_auto_counts[s_name] = {'지각': 0, '결석': 0}
+                        if "결석" in att_status: math_auto_counts[s_name]['결석'] += 1
+                        if "지각" in att_status: math_auto_counts[s_name]['지각'] += 1
+                    elif is_eng:
+                        if s_name not in eng_auto_counts: eng_auto_counts[s_name] = {'지각': 0, '결석': 0}
+                        if "결석" in att_status: eng_auto_counts[s_name]['결석'] += 1
+                        if "지각" in att_status: eng_auto_counts[s_name]['지각'] += 1
+
+            math_auto_list = sorted(list(math_auto_counts.keys()))
+            eng_auto_list = sorted(list(eng_auto_counts.keys()))
+            
+            # 3. 화면 UI: 명단 편집기
+            st.markdown("#### 🛠️ 대상자 명단 확인 및 편집")
+            st.info("💡 평일 결손 인원은 자동 추가되어 있습니다. 박스 안의 **'X'**를 눌러 구제하거나, **빈칸을 클릭**해 학생을 수동으로 추가하세요.")
+            
+            col_m_edit, col_e_edit = st.columns(2)
+            with col_m_edit:
+                final_math = st.multiselect(
+                    f"📘 수학 자습 대상 편집", 
+                    options=math_all_list, 
+                    default=math_auto_list,
+                    key=f"math_ms_{sel_mon}"
+                )
+            with col_e_edit:
+                final_eng = st.multiselect(
+                    f"📙 영어 자습 대상 편집", 
+                    options=eng_all_list, 
+                    default=eng_auto_list,
+                    key=f"eng_ms_{sel_mon}"
+                )
+                
+            # 4. 화면 UI: 횟수가 포함된 최종 확정 명단 출력
+            st.markdown("---")
+            st.markdown("#### 📋 이번 주 최종 확정 명단")
+            col_m, col_e = st.columns(2)
+            
+            with col_m:
+                st.markdown(f"<div style='background-color:#E3F2FD; padding:15px; border-radius:10px; border-left:5px solid #1565C0;'>"
+                            f"<h5 style='color:#1565C0; margin-bottom:10px;'>📘 수학 보충 ({len(final_math)}명)</h5>"
+                            f"<p style='font-size:14px; font-weight:bold; color:#555;'>지정 요일: {math_day}</p></div>", unsafe_allow_html=True)
+                st.write("")
+                if not final_math: st.success("이번 주 수학 보충 대상자가 없습니다! 🎉")
+                else:
+                    for s in sorted(final_math):
+                        if s in math_auto_counts:
+                            c_abs = math_auto_counts[s]['결석']
+                            c_late = math_auto_counts[s]['지각']
+                            reasons = []
+                            if c_abs > 0: reasons.append(f"결석 {c_abs}회")
+                            if c_late > 0: reasons.append(f"지각 {c_late}회")
+                            tag = f"🔴 ({', '.join(reasons)})"
+                        else:
+                            tag = "🟡 (수동배치/숙제미흡)"
+                        st.markdown(f"• **{s}** <span style='font-size:0.85rem; color:#555; margin-left:5px;'>{tag}</span>", unsafe_allow_html=True)
+                        
+            with col_e:
+                st.markdown(f"<div style='background-color:#FFF3E0; padding:15px; border-radius:10px; border-left:5px solid #E65100;'>"
+                            f"<h5 style='color:#E65100; margin-bottom:10px;'>📙 영어 보충 ({len(final_eng)}명)</h5>"
+                            f"<p style='font-size:14px; font-weight:bold; color:#555;'>지정 요일: {eng_day}</p></div>", unsafe_allow_html=True)
+                st.write("")
+                if not final_eng: st.success("이번 주 영어 보충 대상자가 없습니다! 🎉")
+                else:
+                    for s in sorted(final_eng):
+                        if s in eng_auto_counts:
+                            c_abs = eng_auto_counts[s]['결석']
+                            c_late = eng_auto_counts[s]['지각']
+                            reasons = []
+                            if c_abs > 0: reasons.append(f"결석 {c_abs}회")
+                            if c_late > 0: reasons.append(f"지각 {c_late}회")
+                            tag = f"🔴 ({', '.join(reasons)})"
+                        else:
+                            tag = "🟡 (수동배치/숙제미흡)"
+                        st.markdown(f"• **{s}** <span style='font-size:0.85rem; color:#555; margin-left:5px;'>{tag}</span>", unsafe_allow_html=True)
+
+            # 5. 키오스크 연동 버튼 
+            st.markdown("---")
+            if st.button("🚀 위 명단으로 이번 주 주말 자습 시스템 등록 (키오스크 연동)", type="primary", use_container_width=True):
+                # 요일 계산: 토요일은 월요일 기준 +5일, 일요일은 +6일
+                math_date = sel_mon + timedelta(days=5 if math_day == "토요일" else 6)
+                eng_date = sel_mon + timedelta(days=5 if eng_day == "토요일" else 6)
+                
+                # 기존 데이터 초기화 방지 (에러나면 안전하게 패스하도록 처리)
+                try: delete_data_all('weekend_study', {'날짜': str(math_date), '과목': '수학'})
+                except: pass
+                try: delete_data_all('weekend_study', {'날짜': str(eng_date), '과목': '영어'})
+                except: pass
+                
+                bulk_ws = []
+                for s in final_math: bulk_ws.append({'날짜': str(math_date), '과목': '수학', '학생명': s})
+                for s in final_eng: bulk_ws.append({'날짜': str(eng_date), '과목': '영어', '학생명': s})
+                
+                if bulk_ws: 
+                    add_data_bulk('weekend_study', bulk_ws)
+                    show_center_message("✅ 주말 자기주도학습 명단이 키오스크에 성공적으로 전송되었습니다!")
+                    time.sleep(1.5)
+                    st.rerun()
+                else:
+                    st.info("전송할 대상자가 없습니다.")
 
 # ==========================================
 # 7. 강사별 시간표
@@ -2692,27 +2905,31 @@ elif menu == "👤 내 정보 수정":
             
             with st.container(border=True):
                 st.markdown(f"#### 👨‍🏫 {my_name} 선생님 정보")
-                col1, col2 = st.columns(2)
                 
-                with col1:
-                    new_phone = st.text_input("📱 연락처 수정", value=str(my_info.get('연락처', '')))
-                    new_email = st.text_input("📧 이메일 수정", value=str(my_info.get('이메일', '')))
-                
-                with col2:
-                    # 비밀번호는 보안상 type="password"로 설정
-                    new_pw = st.text_input("🔐 비밀번호 변경", value=str(my_info.get('비밀번호', '')), type="password")
-                    st.caption("※ 비밀번호를 비우면 전화번호 뒷자리로 로그인됩니다.")
+                # 🛡️ [핵심 수정] 내 정보 수정도 폼으로 묶어서 로딩 방어!
+                with st.form("my_profile_edit_form", clear_on_submit=False):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        new_phone = st.text_input("📱 연락처 수정", value=str(my_info.get('연락처', '')))
+                        new_email = st.text_input("📧 이메일 수정", value=str(my_info.get('이메일', '')))
+                    
+                    with col2:
+                        new_pw = st.text_input("🔐 비밀번호 변경", value=str(my_info.get('비밀번호', '')), type="password")
+                        st.caption("※ 비밀번호를 비우면 전화번호 뒷자리로 로그인됩니다.")
 
-                new_addr = st.text_area("🏠 주소 수정 ", value=str(my_info.get('주소', '')))
+                    new_addr = st.text_area("🏠 주소 수정 ", value=str(my_info.get('주소', '')))
+                    
+                    submit_my_info = st.form_submit_button("💾 내 정보 업데이트", type="primary", use_container_width=True)
                 
-                if st.button("💾 내 정보 업데이트", type="primary", use_container_width=True):
+                if submit_my_info:
                     update_data('teachers', '이름', my_name, {
                         '연락처': new_phone,
                         '이메일': new_email,
                         '주소': new_addr,
                         '비밀번호': new_pw
                     })
-                    show_center_message("정보가 안전하게 변경되었습니다!")
+                    show_center_message("내 정보가 안전하게 변경되었습니다!")
                     time.sleep(1)
                     st.rerun()
         else:
