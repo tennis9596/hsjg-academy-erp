@@ -436,25 +436,25 @@ with st.sidebar:
         st.rerun()
     st.markdown("---")
     
-    # 전체 메뉴 리스트
+    # [수정 포인트 1] 숫자를 뺀 깔끔한 이모지 메뉴 리스트 + '월간 전략 리포트' 추가
     all_menus = [
-        "🏠 대시보드", "1. 강사 관리", "2. 학생 관리", "3. 반 관리", "4. 수강 배정", 
-        "5. QR 키오스크(출석)", "6. 출석 관리", "7. 강사별 시간표", "8. 강의실별 시간표", 
-        "9. 학생 개인별 종합", "10. 일일 업무 일지", "11. 업무 일지 관리", "👤 내 정보 수정"
+        "🏠 대시보드", "👨‍🏫 강사 관리", "🧑‍🎓 학생 관리", "🏫 반 관리", "📝 수강 배정", 
+        "📷 QR 키오스크(출석)", "✅ 출석 관리", "⏰ 강사별 시간표", "🏢 강의실별 시간표", 
+        "📊 학생 개인별 종합", "✍️ 일일 업무 일지", "📁 업무 일지 관리", "📈 월간 전략 리포트", "👤 내 정보 수정"
     ]
+    
+    # [수정 포인트 2] 월간 전략 리포트용 부트스트랩 아이콘('graph-up') 추가
     all_icons = [
         'house', 'person-video3', 'backpack', 'easel', 'journal-check', 
         'qr-code-scan', 'calendar-check', 'clock', 'building', 'card-checklist', 
-        'pencil-square', 'search', 'person-gear'
+        'pencil-square', 'search', 'graph-up', 'person-gear'
     ]
     
-    # [핵심] 역할별 메뉴 제한 로직
+    # [핵심] 역할별 메뉴 제한 로직 (글자 변경에 맞춰 똑같이 수정!)
     if st.session_state['role'] == 'kiosk':
-        # 키오스크 태블릿은 오직 QR 화면 하나만 띄웁니다!
-        display_menus = ["5. QR 키오스크(출석)"]
+        display_menus = ["📷 QR 키오스크(출석)"]
         display_icons = ['qr-code-scan']
         
-        # 키오스크 모드일 때는 사이드바를 자동으로 접어주는 숨김 CSS (깔끔한 화면을 위해)
         st.markdown("""
             <style>
                 [data-testid="collapsedControl"] { display: none; }
@@ -463,8 +463,8 @@ with st.sidebar:
         """, unsafe_allow_html=True)
 
     elif st.session_state['role'] == 'teacher':
-        # 강사는 1, 5, 11번 메뉴 숨김
-        hidden_menus = ["1. 강사 관리", "5. QR 키오스크(출석)", "11. 업무 일지 관리"]
+        # 강사는 강사 관리, 키오스크, 업무 일지 관리 숨김 (리포트도 원하시면 여기에 추가 가능합니다!)
+        hidden_menus = ["👨‍🏫 강사 관리", "📷 QR 키오스크(출석)", "📁 업무 일지 관리"]
         indices = [i for i, m in enumerate(all_menus) if m not in hidden_menus]
         display_menus = [all_menus[i] for i in indices]
         display_icons = [all_icons[i] for i in indices]
@@ -472,7 +472,7 @@ with st.sidebar:
         display_menus = all_menus
         display_icons = all_icons
 
-    menu = option_menu("메뉴 선택", display_menus, icons=display_icons, menu_icon="cast", default_index=0,
+    menu = option_menu("메뉴 선택", display_menus, menu_icon="cast", default_index=0,
         styles={
             "container": {"padding": "0!important", "background-color": "#f0f2f6"},
             "icon": {"color": "orange", "font-size": "18px"}, 
@@ -788,7 +788,7 @@ if menu == "🏠 대시보드":
 # ==========================================================
 # 1. 강사 관리
 # ==========================================================
-elif menu == "1. 강사 관리":
+elif menu == "👨‍🏫 강사 관리":
     st.subheader("👨‍🏫 강사 관리")
     tab1, tab2 = st.tabs(["➕ 신규 등록", "🔧 수정 및 삭제"])
     
@@ -888,7 +888,7 @@ elif menu == "1. 강사 관리":
 # ==========================================
 # 2. 학생 관리 (재원/퇴원/휴원/졸업 상태 관리 적용)
 # ==========================================
-elif menu == "2. 학생 관리":
+elif menu == "🧑‍🎓 학생 관리":
     st.subheader("📝 학생 관리")
     t1, t2, t3, t4 = st.tabs(["📋 전체 학생 조회", "➕ 신규 등록", "🔧 수정/상태변경", "📱 QR 발급/인쇄"])
     
@@ -1124,7 +1124,7 @@ elif menu == "2. 학생 관리":
 # ==========================================
 # 3. 반 관리
 # ==========================================
-elif menu == "3. 반 관리":
+elif menu == "🏫 반 관리":
     st.subheader("📚 반 관리")
     tab1, tab2 = st.tabs(["➕ 반 개설", "🔧 반 정보 수정/삭제"])
     
@@ -1331,7 +1331,7 @@ elif menu == "3. 반 관리":
 # ==========================================
 # 4. 수강 배정 (클릭 앤 패스 일괄 배정 시스템)
 # ==========================================
-elif menu == "4. 수강 배정":
+elif menu == "📝 수강 배정":
     st.subheader("🔗 스마트 수강 배정 관리")
     
     df_e = load_data('enrollments')
@@ -1478,7 +1478,7 @@ elif menu == "4. 수강 배정":
 # ==========================================
 # 5. QR 키오스크(출석) - 주말 2시간 락(Lock) 기능 탑재
 # ==========================================
-elif menu == "5. QR 키오스크(출석)":
+elif menu == "📷 QR 키오스크(출석)":
     
     st.markdown("""
     <style>
@@ -1679,7 +1679,7 @@ elif menu == "5. QR 키오스크(출석)":
 # ==========================================
 # 6. 출석 관리 (정규/추가 수업 기호 분리 및 인쇄 기능)
 # ==========================================
-elif menu == "6. 출석 관리":
+elif menu == "✅ 출석 관리":
     st.subheader("✅ 출석 관리 및 월간 장부")
     
     # 💡 [핵심 수정] 3번째 탭(주말 관제탑) 추가!
@@ -2054,7 +2054,7 @@ elif menu == "6. 출석 관리":
 # ==========================================
 # 7. 강사별 시간표
 # ==========================================
-elif menu == "7. 강사별 시간표":
+elif menu == "⏰ 강사별 시간표":
     st.subheader("📅 강사별 주간 시간표")
     df_c, df_t, df_e, df_s = load_data('classes'), load_data('teachers'), load_data('enrollments'), load_data('students')
     if not df_t.empty and not df_c.empty:
@@ -2135,7 +2135,7 @@ elif menu == "7. 강사별 시간표":
 # ==========================================
 # 8. 강의실별 시간표 (종합 주간 시간표 A3 인쇄 기능 포함)
 # ==========================================
-elif menu == "8. 강의실별 시간표":
+elif menu == "🏢 강의실별 시간표":
     st.subheader("🏫 강의실 배정 및 종합 시간표")
     
     tab1, tab2 = st.tabs(["🏫 강의실별 일일 조회", "🖨️ 종합 주간 시간표 인쇄 (A3용)"])
@@ -2377,7 +2377,7 @@ elif menu == "8. 강의실별 시간표":
 # ==========================================
 # 9. 학생 개인별 종합
 # ==========================================
-elif menu == "9. 학생 개인별 종합":
+elif menu == "📊 학생 개인별 종합":
     st.subheader("📊 학생 개인별 종합 기록부")
     df_s = load_data('students')
     df_e = load_data('enrollments')
@@ -2592,7 +2592,7 @@ elif menu == "9. 학생 개인별 종합":
 # ==========================================
 # 10. 일일 업무 일지 (강사용 스마트 화면)
 # ==========================================
-elif menu == "10. 일일 업무 일지":
+elif menu == "✍️ 일일 업무 일지":
     st.subheader("일일 업무 일지 작성 및 피드백 확인")
     st.markdown("오늘 진행한 수업 내용과 학생 개별 특이사항을 기록해 주세요.")
     
@@ -2765,7 +2765,7 @@ elif menu == "10. 일일 업무 일지":
 # 11. 업무 일지 관리 (원장님 피드백 화면)
 # ==========================================
 # 이렇게 수정해야 정상 작동합니다!
-elif menu == "11. 업무 일지 관리":
+elif menu == "📁 업무 일지 관리":
     st.subheader("업무 일지 열람 및 관리자 피드백")
     st.markdown("강사님들이 작성한 일지를 확인하고, 피드백이나 격려의 코멘트를 남겨주세요.")
     
@@ -2887,6 +2887,39 @@ elif menu == "11. 업무 일지 관리":
                                 if update_feedback('student_records', target_date_str, s_teacher, '학생명', s_student, new_fb):
                                     show_center_message("✅ 코멘트가 저장되었습니다!")
                                     time.sleep(1); st.rerun()
+
+# -------------------------------------------------------------------------
+# 📈 월간 전략 리포트 (A4 출력용)
+# -------------------------------------------------------------------------
+elif menu == "📈 월간 전략 리포트":
+    st.subheader("📊 학생 맞춤형 월간 전략 리포트")
+    st.caption("A4 용지 1장에 인쇄하기 최적화된 월간 학습 분석 보고서입니다.")
+    st.markdown("---")
+
+    col_m, col_s, col_b = st.columns([1.5, 2, 1])
+    with col_m:
+        target_month = st.selectbox("출력할 월", ["2026-02", "2026-03"], key="sel_report_month")
+    with col_s:
+        student_df = load_data('students')
+        student_list = student_df['이름'].tolist() if not student_df.empty else ["데이터 없음"]
+        selected_student = st.selectbox("대상 학생 선택", student_list, key="report_std_sel")
+    with col_b:
+        st.write("")
+        btn_report = st.button("리포트 생성", type="primary", use_container_width=True)
+
+    if btn_report and selected_student != "데이터 없음":
+        # [시안용 임시 데이터] 나중에 실제 데이터 연동 예정
+        reg_hours, extra_hours, self_hours = 16, 4, 12 
+        with st.container(border=True):
+            st.markdown(f"<h2 style='text-align: center; color: #1E3A8A;'>{target_month}월 [ {selected_student} ] 학생 맞춤형 전략 리포트</h2>", unsafe_allow_html=True)
+            st.markdown("#### 💡 이달의 학습 시간 분석")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("📚 정규 수업 시간", f"{reg_hours} 시간")
+            c2.metric("🎁 학원 추가 보강", f"{extra_hours} 시간", "원장님 특별 관리")
+            c3.metric("🔥 주말 자기주도학습", f"{self_hours} 시간", "스스로 해낸 시간!")
+                
+            expert_comment = f"이번 달 {selected_student} 학생은 학원의 밀착 관리 시스템을 통해 보강 {extra_hours}시간과 자습 {self_hours}시간을 성실히 이행하며 자기주도적인 학습 습관을 형성하고 있습니다."
+            st.info(expert_comment)
 
 # ==========================================
 # 👤 내 정보 수정 (강사 전용 마이페이지)
