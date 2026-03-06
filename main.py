@@ -1606,7 +1606,7 @@ elif menu == "5. QR 키오스크(출석)":
                     
                     if is_weekend_study:
                         target_total = total_class_mins + 120
-                        st.success(f"📚 [{student_name}] 학생, 환영합니다! 오늘 목표 체류시간은 총 {target_total}분입니다. 화이팅! 🔥")
+                        st.success(f"📚 [{student_name}] 학생, 환영합니다! 오늘 목표 학습시간은 총 {target_total}분입니다. 화이팅! 🔥")
                     else:
                         st.success(f"🏫 [{student_name}] 학생, 환영합니다! ({status})")
                     st.balloons()
@@ -1646,7 +1646,7 @@ elif menu == "5. QR 키오스크(출석)":
                             except: pass
                         
                         if not can_leave:
-                            st.error(f"🚫 [{student_name}] 학생, 아직 집에 갈 수 없습니다!")
+                            st.error(f"🚫 [{student_name}] 학생, 아직 종료시간이 아닙니다!")
                             st.warning(lock_reason)
                         else:
                             new_memo = f"하원 {now.strftime('%H:%M')}"
