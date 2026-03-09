@@ -423,8 +423,22 @@ if not st.session_state['logged_in']:
     st.stop()  # 로그인 안 되면 여기서 화면 멈춤
 
 # ==========================================
-# [메뉴] 사이드바 구성 (역할별 권한 분리 적용)
+# [메뉴 별명 상수 정의] 유지보수 및 데이터 연동 최적화
 # ==========================================
+MENU_DASHBOARD = "🏠 대시보드"
+MENU_TEACHER = "👨‍🏫 강사 관리"
+MENU_STUDENT = "🧑‍🎓 학생 관리"
+MENU_CLASS = "🏫 반 관리"
+MENU_ENROLL = "📝 수강 배정"
+MENU_KIOSK = "📷 QR 키오스크(출석)"
+MENU_ATTENDANCE = "✅ 출석 관리"
+MENU_TIMETABLE_T = "⏰ 강사별 시간표"
+MENU_TIMETABLE_C = "🏢 강의실별 시간표"
+MENU_STUDENT_INFO = "📊 학생 개인별 종합"
+MENU_DAILY_LOG = "✍️ 일일 업무 일지"
+MENU_LOG_MANAGE = "📁 업무 일지 관리"
+MENU_REPORT = "📈 월간 전략 리포트"
+MENU_PROFILE = "👤 내 정보 수정"
 with st.sidebar:
     st.title("🏫 형설지공 학원")
     st.markdown(f"**반갑습니다, {st.session_state['username']}님!**")
@@ -436,11 +450,11 @@ with st.sidebar:
         st.rerun()
     st.markdown("---")
     
-    # [수정 포인트 1] 숫자를 뺀 깔끔한 이모지 메뉴 리스트 + '월간 전략 리포트' 추가
+    # [수정] 텍스트 대신 '별명'으로 메뉴 리스트 구성
     all_menus = [
-        "🏠 대시보드", "👨‍🏫 강사 관리", "🧑‍🎓 학생 관리", "🏫 반 관리", "📝 수강 배정", 
-        "📷 QR 키오스크(출석)", "✅ 출석 관리", "⏰ 강사별 시간표", "🏢 강의실별 시간표", 
-        "📊 학생 개인별 종합", "✍️ 일일 업무 일지", "📁 업무 일지 관리", "📈 월간 전략 리포트", "👤 내 정보 수정"
+        MENU_DASHBOARD, MENU_TEACHER, MENU_STUDENT, MENU_CLASS, MENU_ENROLL, 
+        MENU_KIOSK, MENU_ATTENDANCE, MENU_TIMETABLE_T, MENU_TIMETABLE_C, 
+        MENU_STUDENT_INFO, MENU_DAILY_LOG, MENU_LOG_MANAGE, MENU_REPORT, MENU_PROFILE
     ]
     
     # [수정 포인트 2] 월간 전략 리포트용 부트스트랩 아이콘('graph-up') 추가
@@ -463,11 +477,10 @@ with st.sidebar:
         """, unsafe_allow_html=True)
 
     elif st.session_state['role'] == 'teacher':
-        # 강사는 강사 관리, 키오스크, 업무 일지 관리 숨김 (리포트도 원하시면 여기에 추가 가능합니다!)
-        hidden_menus = ["👨‍🏫 강사 관리", "📷 QR 키오스크(출석)", "📁 업무 일지 관리"]
+        # [수정] 강사 숨김 메뉴도 별명으로 적용!
+        hidden_menus = [MENU_TEACHER, MENU_KIOSK, MENU_LOG_MANAGE]
         indices = [i for i, m in enumerate(all_menus) if m not in hidden_menus]
         display_menus = [all_menus[i] for i in indices]
-        display_icons = [all_icons[i] for i in indices]
     else:
         display_menus = all_menus
         display_icons = all_icons
@@ -492,7 +505,7 @@ with st.sidebar:
 # ==========================================
 # 🏠 대시보드 (메인 화면)
 # ==========================================
-if menu == "🏠 대시보드":
+if menu == MENU_DASHBOARD:
     from streamlit_autorefresh import st_autorefresh
     st_autorefresh(interval=60000, limit=None, key="dashboard_refresh")
     
@@ -788,7 +801,7 @@ if menu == "🏠 대시보드":
 # ==========================================================
 # 1. 강사 관리
 # ==========================================================
-elif menu == "👨‍🏫 강사 관리":
+elif menu == MENU_TEACHER:
     st.subheader("👨‍🏫 강사 관리")
     tab1, tab2 = st.tabs(["➕ 신규 등록", "🔧 수정 및 삭제"])
     
@@ -888,7 +901,7 @@ elif menu == "👨‍🏫 강사 관리":
 # ==========================================
 # 2. 학생 관리 (재원/퇴원/휴원/졸업 상태 관리 적용)
 # ==========================================
-elif menu == "🧑‍🎓 학생 관리":
+elif menu == MENU_STUDENT:
     st.subheader("📝 학생 관리")
     t1, t2, t3, t4 = st.tabs(["📋 전체 학생 조회", "➕ 신규 등록", "🔧 수정/상태변경", "📱 QR 발급/인쇄"])
     
@@ -1124,7 +1137,7 @@ elif menu == "🧑‍🎓 학생 관리":
 # ==========================================
 # 3. 반 관리
 # ==========================================
-elif menu == "🏫 반 관리":
+elif menu == MENU_CLASS:
     st.subheader("📚 반 관리")
     tab1, tab2 = st.tabs(["➕ 반 개설", "🔧 반 정보 수정/삭제"])
     
@@ -1147,10 +1160,20 @@ elif menu == "🏫 반 관리":
             st.divider()
 
             t_opts = (get_col_data(df_t, '이름', 0) + " (" + get_col_data(df_t, '과목', 1) + ")").tolist()
+            
+            # 💡 [추가] 로그인한 강사가 본인일 경우 목록에서 몇 번째인지 찾기
+            default_t_idx = 0
+            if st.session_state['role'] == 'teacher':
+                for i, opt in enumerate(t_opts):
+                    if st.session_state['username'] in opt:
+                        default_t_idx = i
+                        break
+            
             c1, c2, c3 = st.columns([2, 1, 2])
             c_name = c1.text_input("반 이름 (예: 중2 수학 보강)", key="new_c_name")
             c_room = c2.selectbox("강의실", rooms, key="new_c_room")
-            t_name = c3.selectbox("담당 선생님", t_opts, key="new_t_name")
+            # 💡 index=default_t_idx 를 추가하여 내 이름을 기본으로 띄웁니다!
+            t_name = c3.selectbox("담당 선생님", t_opts, index=default_t_idx, key="new_t_name")
             
             start_d, end_d, reason = "", "", ""
             if class_type == "📙 보강/단기특강":
@@ -1331,7 +1354,7 @@ elif menu == "🏫 반 관리":
 # ==========================================
 # 4. 수강 배정 (클릭 앤 패스 일괄 배정 시스템)
 # ==========================================
-elif menu == "📝 수강 배정":
+elif menu == MENU_ENROLL:
     st.subheader("🔗 스마트 수강 배정 관리")
     
     df_e = load_data('enrollments')
@@ -1388,7 +1411,13 @@ elif menu == "📝 수강 배정":
             
             if sel_subj != "(선택)":
                 sub_teachers = df_t[df_t.iloc[:, 1] == sel_subj].iloc[:, 0].tolist()
-                sel_tea = c2.selectbox("👨‍🏫 강사 선택", ["(선택)"] + sub_teachers)
+                
+                # 💡 [추가] 해당 과목 강사 중에 내가 있다면 내 이름을 기본으로 세팅!
+                def_t_idx = 0
+                if st.session_state['role'] == 'teacher' and st.session_state['username'] in sub_teachers:
+                    def_t_idx = sub_teachers.index(st.session_state['username']) + 1 # "(선택)"이 0번이므로 +1
+                    
+                sel_tea = c2.selectbox("👨‍🏫 강사 선택", ["(선택)"] + sub_teachers, index=def_t_idx)
                 
                 if sel_tea != "(선택)":
                     t_classes = df_c[df_c.iloc[:, 1].str.contains(sel_tea)]
@@ -1478,7 +1507,7 @@ elif menu == "📝 수강 배정":
 # ==========================================
 # 5. QR 키오스크(출석) - 주말 2시간 락(Lock) 기능 탑재
 # ==========================================
-elif menu == "📷 QR 키오스크(출석)":
+elif menu == MENU_KIOSK:
     
     st.markdown("""
     <style>
@@ -1679,7 +1708,7 @@ elif menu == "📷 QR 키오스크(출석)":
 # ==========================================
 # 6. 출석 관리 (정규/추가 수업 기호 분리 및 인쇄 기능)
 # ==========================================
-elif menu == "✅ 출석 관리":
+elif menu == MENU_ATTENDANCE:
     st.subheader("✅ 출석 관리 및 월간 장부")
     
     # 💡 [핵심 수정] 3번째 탭(주말 관제탑) 추가!
@@ -2054,10 +2083,16 @@ elif menu == "✅ 출석 관리":
 # ==========================================
 # 7. 강사별 시간표
 # ==========================================
-elif menu == "⏰ 강사별 시간표":
+elif menu == MENU_TIMETABLE_T:
     st.subheader("📅 강사별 주간 시간표")
     df_c, df_t, df_e, df_s = load_data('classes'), load_data('teachers'), load_data('enrollments'), load_data('students')
     if not df_t.empty and not df_c.empty:
+        # 💡 [추가] 로그인한 강사의 데이터를 맨 앞으로 끌어올리는 마법의 정렬!
+        if st.session_state['role'] == 'teacher':
+            my_name = st.session_state['username']
+            is_me = df_t.iloc[:, 0] == my_name
+            df_t = pd.concat([df_t[is_me], df_t[~is_me]]) # 내 데이터 먼저, 나머지 뒤에 붙이기
+
         t_names = get_col_data(df_t, '이름', 0); t_subs = get_col_data(df_t, '과목', 1)
         days_ko = ["월", "화", "수", "목", "금", "토", "일"]
         tabs = st.tabs([f"{n} ({s})" for n, s in zip(t_names, t_subs)])
@@ -2135,7 +2170,7 @@ elif menu == "⏰ 강사별 시간표":
 # ==========================================
 # 8. 강의실별 시간표 (종합 주간 시간표 A3 인쇄 기능 포함)
 # ==========================================
-elif menu == "🏢 강의실별 시간표":
+elif menu == MENU_TIMETABLE_C:
     st.subheader("🏫 강의실 배정 및 종합 시간표")
     
     tab1, tab2 = st.tabs(["🏫 강의실별 일일 조회", "🖨️ 종합 주간 시간표 인쇄 (A3용)"])
@@ -2377,7 +2412,7 @@ elif menu == "🏢 강의실별 시간표":
 # ==========================================
 # 9. 학생 개인별 종합
 # ==========================================
-elif menu == "📊 학생 개인별 종합":
+elif menu == MENU_STUDENT_INFO:
     st.subheader("📊 학생 개인별 종합 기록부")
     df_s = load_data('students')
     df_e = load_data('enrollments')
@@ -2590,103 +2625,138 @@ elif menu == "📊 학생 개인별 종합":
                 st.info("수강 정보가 없습니다.")
 
 # ==========================================
-# 10. 일일 업무 일지 (강사용 스마트 화면)
+# 10. 일일 업무 일지 (과거 기록 열람 및 🔍 전체보기 팝업 탑재)
 # ==========================================
-elif menu == "✍️ 일일 업무 일지":
-    st.subheader("일일 업무 일지 작성 및 피드백 확인")
-    st.markdown("오늘 진행한 수업 내용과 학생 개별 특이사항을 기록해 주세요.")
+elif menu == MENU_DAILY_LOG:
+    st.subheader("일일 업무 일지 작성 및 수정")
+    st.markdown("오늘 진행한 수업이나 학생 특이사항을 기록하세요. 💡 **과거 날짜를 선택하면 내용을 불러와 수정할 수 있습니다.**")
     
+    # 💡 [핵심 추가] 글을 넓은 화면에서 쾌적하게 읽게 해주는 마법의 헬퍼 함수!
+    def render_large_view(icon, label, val, placeholder, height_val):
+        c_lbl, c_pop = st.columns([5, 1.5])
+        with c_lbl: 
+            st.markdown(f"**{icon} {label}**")
+        with c_pop:
+            # 팝업(popover)을 띄워 글씨를 크고 시원하게 보여줍니다.
+            with st.popover("🔍 전체보기", use_container_width=True):
+                st.markdown(f"##### {icon} {label} (크게 보기)")
+                if val:
+                    st.markdown(f"<div style='white-space: pre-wrap; font-size: 15px; line-height: 1.6; padding: 15px; background-color: #F8F9FA; border-radius: 8px; border: 1px solid #E0E0E0;'>{val}</div>", unsafe_allow_html=True)
+                else:
+                    st.info("아직 기록된 내용이 없습니다.")
+        # 라벨을 숨기고 텍스트 상자만 깔끔하게 붙여줍니다.
+        return st.text_area(f"{label} 입력", value=val, placeholder=placeholder, height=height_val, label_visibility="collapsed")
+
     df_t, df_c, df_s = load_data('teachers'), load_data('classes'), load_data('students')
+    df_cl = load_data('class_logs')
+    df_sr = load_data('student_records')
     
-    # [핵심] 로그인한 사람의 역할(Role)에 따라 선택지 완벽 분리
     if st.session_state['role'] == 'teacher':
-        # 강사는 본인 이름으로만 고정!
         teacher_names = [st.session_state['username']]
-        # 반 목록도 본인이 담당하는 반만 쏙 뽑아옵니다.
         my_classes = df_c[df_c.iloc[:, 1].str.contains(st.session_state['username'])] if not df_c.empty else pd.DataFrame()
         class_names = my_classes.iloc[:, 0].tolist() if not my_classes.empty else ["담당 배정된 반이 없습니다."]
     else:
-        # 원장님은 전체 다 볼 수 있음!
         teacher_names = df_t.iloc[:, 0].tolist() if not df_t.empty else ["등록된 강사 없음"]
         class_names = df_c.iloc[:, 0].tolist() if not df_c.empty else ["등록된 반 없음"]
         
     student_names = df_s.iloc[:, 0].tolist() if not df_s.empty else ["등록된 학생 없음"]
     
-    tab1, tab2, tab3 = st.tabs(["📚 반별 수업 일지 작성", "🧑‍🎓 학생 개별 기록 작성", "💬 원장님 피드백 확인"])
+    tab1, tab2, tab3 = st.tabs(["📚 반별 수업 일지 작성/수정", "🧑‍🎓 학생 개별 기록 작성/수정", "💬 원장님 피드백 확인"])
     
     # ---------------------------------------------------------
-    # 탭 1: 반별 수업 일지 작성 폼 (교재 무한 추가 및 Enter키 방어 적용)
+    # 탭 1: 반별 수업 일지
     # ---------------------------------------------------------
     with tab1:
-        st.markdown("##### 📚 오늘 수업하신 반의 진도와 숙제를 입력하세요.")
-        
-        if 'book_count' not in st.session_state: 
-            st.session_state.book_count = 1
-            
         with st.container(border=True):
             col1, col2, col3 = st.columns(3)
             with col1: log_date = st.date_input("날짜", datetime.today().date(), key="log_date")
             with col2: log_teacher = st.selectbox("담당 강사", teacher_names, key="log_teacher")
             with col3: log_class = st.selectbox("대상 반", class_names, key="log_class")
             
+            existing_cl = pd.DataFrame()
+            if not df_cl.empty:
+                existing_cl = df_cl[(df_cl['날짜'].astype(str) == str(log_date)) & 
+                                    (df_cl['강사명'] == log_teacher) & 
+                                    (df_cl['대상반'] == log_class)]
+            
+            is_edit_cl = not existing_cl.empty 
+            
+            def_book, def_prog, def_hw = "", "", ""
+            if is_edit_cl:
+                row = existing_cl.iloc[0]
+                def_book = str(row.get('사용교재', ''))
+                def_prog = str(row.get('수업진도', ''))
+                def_hw = str(row.get('부과된숙제', ''))
+                st.info("📝 이미 작성된 일지가 있습니다. 수정 시 덮어쓰기 됩니다.")
+            else:
+                st.success("✨ 새로운 일지를 작성합니다.")
+
             st.divider()
-            st.markdown("###### 📖 사용 교재")
             
-            books = []
-            for i in range(st.session_state.book_count):
-                # 💡 [수정 포인트 1] st.text_input을 st.text_area로 변경하여 Enter키를 쳐도 저장되지 않게 방어!
-                b = st.text_area(f"교재 {i+1}", placeholder="예: 개념원리 수학상 50p~65p (Enter로 줄바꿈 가능)", key=f"log_book_{i}", height=68)
-                books.append(b)
-                
-            if st.button("➕ 교재 칸 추가", key="add_book_btn"):
-                st.session_state.book_count += 1
-                st.rerun()
-                
-            st.divider()
-            log_progress = st.text_area("수업 진도 및 내용 (최대한 상세히 적어주세요)", height=100, key="log_progress")
+            # 💡 [핵심 개선] 헬퍼 함수 적용! (라벨 옆에 '🔍전체보기' 자동 생성)
+            log_books = render_large_view("📖", "사용 교재", def_book, "예: 개념원리 수학상 50p~65p (여러 개 입력 가능)", 68)
+            log_progress = render_large_view("🏃", "수업 진도 및 내용", def_prog, "최대한 상세히 적어주세요", 100)
+            log_homework = render_large_view("📝", "부과된 숙제", def_hw, "없으면 '없음'으로 기재", 68)
             
-            # 💡 [수정 포인트 2] 숙제 칸도 st.text_area로 변경!
-            log_homework = st.text_area("부과된 숙제 (없으면 '없음'으로 기재)", key="log_homework", height=68)
+            btn_label = "💾 기존 일지 수정하기 (덮어쓰기)" if is_edit_cl else "💾 반별 일지 새로 저장하기"
             
-            if st.button("💾 반별 일지 저장하기", use_container_width=True, type="primary"):
+            if st.button(btn_label, use_container_width=True, type="primary"):
                 if log_class == "담당 배정된 반이 없습니다.": 
                     st.error("배정된 반이 없습니다. 원장님께 문의해주세요.")
                 elif not log_progress: 
                     st.warning("수업 진도 및 내용을 입력해 주세요.")
                 else:
-                    valid_books = [b.strip() for b in books if b.strip()]
-                    final_books = ", ".join(valid_books) if valid_books else "입력 없음"
-                    
+                    if is_edit_cl:
+                        delete_data_all('class_logs', {'날짜': str(log_date), '강사명': log_teacher, '대상반': log_class})
+                        
                     add_data('class_logs', {
                         '날짜': str(log_date), '강사명': log_teacher, '대상반': log_class, 
-                        '사용교재': final_books, '수업진도': log_progress, '부과된숙제': log_homework
+                        '사용교재': log_books if log_books else "입력 없음", 
+                        '수업진도': log_progress, '부과된숙제': log_homework if log_homework else "없음"
                     })
-                    st.success(f"✅ [{log_class}] 반의 일지가 저장되었습니다!")
-                    
-                    st.session_state.book_count = 1
-                    keys_to_clear = ["log_progress", "log_homework"] + [f"log_book_{i}" for i in range(20)]
-                    for k in keys_to_clear:
-                        if k in st.session_state: del st.session_state[k]
-                    time.sleep(1.5)
-                    st.rerun()
+                    show_center_message(f"✅ [{log_class}] 반 일지 {'수정' if is_edit_cl else '저장'} 완료!")
+                    time.sleep(1); st.rerun()
 
     # ---------------------------------------------------------
-    # 탭 2: 학생 개별 기록 작성 폼 (다중 분류 선택 및 점수란 완전 제거)
+    # 탭 2: 학생 개별 기록
     # ---------------------------------------------------------
     with tab2:
-        with st.form("student_record_form", clear_on_submit=True):
-            st.markdown("##### 🧑‍🎓 특정 학생의 상담 내용이나 특이사항을 기록하세요.")
+        with st.container(border=True):
             col1, col2, col3 = st.columns(3)
-            with col1: sr_date = st.date_input("날짜", datetime.today().date())
-            with col2: sr_teacher = st.selectbox("작성 강사", teacher_names)
-            with col3: sr_student = st.selectbox("대상 학생", student_names)
+            with col1: sr_date = st.date_input("날짜", datetime.today().date(), key="sr_date")
+            with col2: sr_teacher = st.selectbox("작성 강사", teacher_names, key="sr_teacher")
+            with col3: sr_student = st.selectbox("대상 학생", student_names, key="sr_student")
             
-            # 💡 [수정 포인트 1] 점수 입력칸(col_score) 완전 삭제
-            # 💡 [수정 포인트 2] selectbox를 multiselect로 변경하여 여러 개 동시 선택 가능하게 적용
-            sr_categories = st.multiselect("기록 분류 (해당하는 것을 모두 고르세요)", ["테스트 결과", "학생 상담", "학부모 상담", "특이사항 (태도 등)"])
-            sr_details = st.text_area("세부 내용", height=150)
+            existing_sr = pd.DataFrame()
+            if not df_sr.empty:
+                existing_sr = df_sr[(df_sr['날짜'].astype(str) == str(sr_date)) & 
+                                    (df_sr['강사명'] == sr_teacher) & 
+                                    (df_sr['학생명'] == sr_student)]
             
-            if st.form_submit_button("학생 개별 기록 저장하기", use_container_width=True, type="primary"):
+            is_edit_sr = not existing_sr.empty
+            
+            cat_options = ["테스트 결과", "학생 상담", "학부모 상담", "특이사항 (태도 등)"]
+            def_cats = []
+            def_details = ""
+            
+            if is_edit_sr:
+                row = existing_sr.iloc[0]
+                saved_cats = str(row.get('분류', ''))
+                def_cats = [c.strip() for c in saved_cats.split(',')]
+                def_cats = [c for c in def_cats if c in cat_options]
+                def_details = str(row.get('세부내용', ''))
+                st.info("📝 이미 작성된 학생 기록이 있습니다. 수정 시 덮어쓰기 됩니다.")
+            else:
+                st.success("✨ 새로운 학생 기록을 작성합니다.")
+            
+            sr_categories = st.multiselect("기록 분류 (해당하는 것을 모두 고르세요)", cat_options, default=def_cats)
+            
+            # 💡 [핵심 개선] 학생 세부 내용 칸에도 헬퍼 함수 적용!
+            sr_details = render_large_view("📋", "세부 내용", def_details, "상담 내용이나 특이사항을 상세히 적어주세요", 150)
+            
+            btn_label_sr = "💾 학생 기록 수정하기 (덮어쓰기)" if is_edit_sr else "💾 학생 개별 기록 새로 저장하기"
+            
+            if st.button(btn_label_sr, use_container_width=True, type="primary"):
                 if sr_student == "등록된 학생 없음": 
                     st.error("등록된 학생이 없습니다.")
                 elif not sr_categories:
@@ -2694,18 +2764,20 @@ elif menu == "✍️ 일일 업무 일지":
                 elif not sr_details: 
                     st.warning("세부 내용을 입력해 주세요.")
                 else:
-                    # 💡 [수정 포인트 3] 선택된 여러 분류를 쉼표로 예쁘게 합쳐줍니다. (예: "학생 상담, 학부모 상담")
+                    if is_edit_sr:
+                        delete_data_all('student_records', {'날짜': str(sr_date), '강사명': sr_teacher, '학생명': sr_student})
+                        
                     final_categories = ", ".join(sr_categories)
-                    
                     add_data('student_records', {
                         '날짜': str(sr_date), '강사명': sr_teacher, '학생명': sr_student, 
                         '분류': final_categories, '세부내용': sr_details, 
-                        '점수': "" # 기존 구글 시트 장부 열(Column)이 꼬이지 않도록 빈칸으로 안전하게 전송합니다.
+                        '점수': "" 
                     })
-                    st.success(f"✅ [{sr_student}] 학생 기록이 저장되었습니다!")
+                    show_center_message(f"✅ [{sr_student}] 학생 기록 {'수정' if is_edit_sr else '저장'} 완료!")
+                    time.sleep(1); st.rerun()
 
     # ---------------------------------------------------------
-    # 탭 3: 내 일지 피드백 확인 (전체 기록 열람 가능하도록 수정)
+    # 탭 3: 원장님 피드백 확인 
     # ---------------------------------------------------------
     with tab3:
         if st.session_state['role'] == 'teacher':
@@ -2715,13 +2787,10 @@ elif menu == "✍️ 일일 업무 일지":
             search_teacher = st.selectbox("조회할 강사명 선택", teacher_names)
             st.markdown(f"##### 💬 **{search_teacher} 강사님**의 일지 및 피드백 내역")
             
-        df_cl, df_sr = load_data('class_logs'), load_data('student_records')
         has_history = False
         st.divider()
         
-        # 1) 반별 수업 일지 렌더링
         if not df_cl.empty:
-            # 💡 [핵심 수정] 관리자 코멘트가 없어도 무조건 보이도록 필터 조건 완화!
             my_cl_fb = df_cl[df_cl['강사명'].astype(str) == search_teacher]
             if not my_cl_fb.empty:
                 st.markdown("###### 📚 반별 수업 일지 기록")
@@ -2734,12 +2803,9 @@ elif menu == "✍️ 일일 업무 일지":
                         st.markdown(f"**🏃 진도:**\n{row.get('수업진도', '')}")
                         st.markdown(f"**📝 숙제:** {row.get('부과된숙제', '')}")
                         
-                        if str(c_comment).strip():
-                            st.info(f"💬 **원장님 코멘트:**\n{c_comment}")
-                        else:
-                            st.caption("⏳ 원장님 확인 대기 중...")
+                        if str(c_comment).strip(): st.info(f"💬 **원장님 코멘트:**\n{c_comment}")
+                        else: st.caption("⏳ 원장님 확인 대기 중...")
                             
-        # 2) 학생 개별 기록 렌더링
         if not df_sr.empty:
             my_sr_fb = df_sr[df_sr['강사명'].astype(str) == search_teacher]
             if not my_sr_fb.empty:
@@ -2752,11 +2818,8 @@ elif menu == "✍️ 일일 업무 일지":
                     
                     with st.expander(f"📅 {row['날짜']} | [{row['학생명']}] - {row.get('분류', '')}{score_str}", expanded=True):
                         st.markdown(f"**📋 내용:**\n{row.get('세부내용', '')}")
-                        
-                        if str(s_comment).strip():
-                            st.success(f"💬 **원장님 코멘트:**\n{s_comment}")
-                        else:
-                            st.caption("⏳ 원장님 확인 대기 중...")
+                        if str(s_comment).strip(): st.success(f"💬 **원장님 코멘트:**\n{s_comment}")
+                        else: st.caption("⏳ 원장님 확인 대기 중...")
                             
         if not has_history: 
             st.caption("작성된 기록이 없습니다. 오늘도 수고 많으셨습니다! 😊")
@@ -2765,7 +2828,7 @@ elif menu == "✍️ 일일 업무 일지":
 # 11. 업무 일지 관리 (원장님 피드백 화면)
 # ==========================================
 # 이렇게 수정해야 정상 작동합니다!
-elif menu == "📁 업무 일지 관리":
+elif menu == MENU_LOG_MANAGE:
     st.subheader("업무 일지 열람 및 관리자 피드백")
     st.markdown("강사님들이 작성한 일지를 확인하고, 피드백이나 격려의 코멘트를 남겨주세요.")
     
@@ -2891,7 +2954,7 @@ elif menu == "📁 업무 일지 관리":
 # -------------------------------------------------------------------------
 # 📈 월간 전략 리포트 (A4 출력용)
 # -------------------------------------------------------------------------
-elif menu == "📈 월간 전략 리포트":
+elif menu == MENU_REPORT:
     st.subheader("📊 학생 맞춤형 월간 전략 리포트")
     st.caption("A4 용지 1장에 인쇄하기 최적화된 월간 학습 분석 보고서입니다.")
     st.markdown("---")
@@ -2924,7 +2987,7 @@ elif menu == "📈 월간 전략 리포트":
 # ==========================================
 # 👤 내 정보 수정 (강사 전용 마이페이지)
 # ==========================================
-elif menu == "👤 내 정보 수정":
+elif menu == MENU_PROFILE:
     st.subheader("👤 내 정보 관리")
     
     if st.session_state['role'] == 'teacher':
