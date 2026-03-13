@@ -2610,6 +2610,73 @@ elif menu == MENU_STUDENT_INFO:
                             else: st.markdown("<br>", unsafe_allow_html=True)
             
             # 여기서부터 찌꺼기로 남았던 에러 부분이 완벽하게 정리되었습니다!
+            # ---------------------------------------------------------
+            # 💡 [신규 추가] 월간 자기주도학습 누적 시간 및 그룹별 평균 비교
+            # ---------------------------------------------------------
+            st.markdown("---")
+            st.markdown(f"##### 🔥 {st.session_state.view_month}월 자기주도학습 현황 (누적)")
+            
+            target_ym = f"{st.session_state.view_year}-{st.session_state.view_month:02d}"
+            month_att = df_a[df_a.iloc[:,0].astype(str).str.startswith(target_ym)] if not df_a.empty else pd.DataFrame()
+            
+            # 1. 이달의 모든 학생 자습 시간 합산
+            self_study_totals = {}
+            if not month_att.empty:
+                for _, r in month_att.iterrows():
+                    sn = str(r.iloc[2])
+                    memo = str(r.get('비고', ''))
+                    if '자습:' in memo:
+                        try:
+                            mins = int(memo.split('자습:')[1].split()[0])
+                            self_study_totals[sn] = self_study_totals.get(sn, 0) + mins
+                        except: pass
+                        
+            # 2. 통계 그룹 분류 (현재 등록된 재원/휴원생 기준)
+            if '상태' not in df_s.columns: df_s['상태'] = '재원'
+            active_students = df_s[df_s['상태'].isin(['재원', '휴원'])]
+            
+            grade_totals = {}
+            level_totals = {'초등부': [], '중등부': [], '고등부': [], '기타': []}
+            all_totals = []
+            
+            for _, r in active_students.iterrows():
+                sn = str(r.iloc[0])
+                sg = str(r.iloc[3]) # 학년
+                
+                mins = self_study_totals.get(sn, 0)
+                all_totals.append(mins)
+                
+                # 동일 학년 분류
+                if sg not in grade_totals: grade_totals[sg] = []
+                grade_totals[sg].append(mins)
+                
+                # 학교급(초/중/고) 분류
+                if '초' in sg: level_totals['초등부'].append(mins)
+                elif '중' in sg: level_totals['중등부'].append(mins)
+                elif '고' in sg: level_totals['고등부'].append(mins)
+                else: level_totals['기타'].append(mins)
+                
+            # 3. 선택된 학생의 데이터 매칭
+            my_mins = self_study_totals.get(real_name, 0)
+            my_grade = str(s_info.iloc[3])
+            my_level = "초등부" if "초" in my_grade else ("중등부" if "중" in my_grade else ("고등부" if "고" in my_grade else "기타"))
+            
+            # 4. 평균 계산 헬퍼 함수
+            def calc_avg(val_list): return sum(val_list) // len(val_list) if val_list else 0
+            
+            avg_grade = calc_avg(grade_totals.get(my_grade, []))
+            avg_level = calc_avg(level_totals.get(my_level, []))
+            avg_all = calc_avg(all_totals)
+            
+            def fmt_mins(m): return f"{m//60}시간 {m%60}분" if m >= 60 else f"{m}분"
+            
+            # 5. UI 출력 (4개의 카드로 예쁘게 표시)
+            c_s1, c_s2, c_s3, c_s4 = st.columns(4)
+            c_s1.metric(f"🧑‍🎓 이달의 내 자습 시간", fmt_mins(my_mins))
+            c_s2.metric(f"👥 동일 학년({my_grade}) 평균", fmt_mins(avg_grade))
+            c_s3.metric(f"🏫 학교급({my_level}) 평균", fmt_mins(avg_level))
+            c_s4.metric(f"🏢 학원 전체 재원생 평균", fmt_mins(avg_all))
+            
             st.markdown("---")
             st.markdown("##### 📊 과목별 이달의 출결 요약")
             
