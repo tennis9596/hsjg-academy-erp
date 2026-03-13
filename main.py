@@ -1645,6 +1645,39 @@ elif menu == MENU_KIOSK:
                 acc_mins = get_monthly_self_study(df_a, student_name, target_ym)
                 acc_str = f"{acc_mins // 60}시간 {acc_mins % 60}분" if acc_mins >= 60 else f"{acc_mins}분"
 
+                # 💡 [핵심 추가] 화면 중앙에 팝업을 띄우고 5초 뒤 사라지게 하는 마법의 말풍선 함수!
+                def show_floating_popup(msg_type, title, main_text, sub_text=""):
+                    colors = {
+                        "success": ("#E8F5E9", "#4CAF50", "#2E7D32"), # 초록 (등원)
+                        "info": ("#E3F2FD", "#2196F3", "#1565C0"),    # 파랑 (하원)
+                        "warning": ("#FFF3E0", "#FF9800", "#E65100"), # 주황 (누락/주의)
+                        "error": ("#FFEBEE", "#F44336", "#C62828")    # 빨강 (불가)
+                    }
+                    bg_col, border_col, text_col = colors.get(msg_type, colors["info"])
+                    
+                    html = f"""
+                    <div style='
+                        position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 99999; 
+                        background-color: rgba(255, 255, 255, 0.95); padding: 40px; border-radius: 30px; 
+                        border: 6px solid {border_col}; box-shadow: 0 25px 50px rgba(0,0,0,0.5); 
+                        text-align: center; width: 85%; max-width: 700px;
+                        animation: popAndFade 6s ease-in-out forwards; pointer-events: none;
+                    '>
+                        <h1 style='color: {text_col}; font-size: 55px; margin-bottom: 20px;'>{title}</h1>
+                        <h2 style='color: #222; font-size: 40px; line-height: 1.4;'>{main_text}</h2>
+                        {"<hr style='border: 1px solid #ddd; margin: 25px 0;'><h3 style='color: #444; font-size: 32px; line-height: 1.5;'>" + sub_text + "</h3>" if sub_text else ""}
+                    </div>
+                    <style>
+                        @keyframes popAndFade {{
+                            0% {{ opacity: 0; transform: translate(-50%, -30%) scale(0.7); }}
+                            8% {{ opacity: 1; transform: translate(-50%, -50%) scale(1); }}
+                            85% {{ opacity: 1; transform: translate(-50%, -50%) scale(1); }}
+                            100% {{ opacity: 0; transform: translate(-50%, -60%) scale(0.8); visibility: hidden; }}
+                        }}
+                    </style>
+                    """
+                    st.markdown(html, unsafe_allow_html=True)
+
                 # 출결 기록 조회 (오늘 기록 중 첫 번째 기준)
                 rep_class = classes_to_record[0]
                 today_records = pd.DataFrame()
@@ -1661,8 +1694,9 @@ elif menu == MENU_KIOSK:
                         bulk_data = [{'날짜': td_date, '반이름': c, '학생': student_name, '상태': status, '비고': memo} for c in classes_to_record]
                         add_data_bulk('attendance', bulk_data)
                         
-                        st.warning(f"⚠️ **[{student_name}]** 학생, 오늘 올 때 깜빡하고 QR을 안 찍었네요!")
-                        st.success(f"그래도 늦게까지 고생 많았어요. 정상 출석 처리되었습니다. 조심히 가요! 👋")
+                        show_floating_popup("warning", "⚠️ 자동 하원 처리", 
+                                            f"<b>[{student_name}]</b> 학생,<br>올 때 QR을 깜빡했네요!", 
+                                            "정상 출석으로 처리되었습니다.<br>조심히 가요! 👋")
                         st.snow()
                         
                     else:
@@ -1676,17 +1710,19 @@ elif menu == MENU_KIOSK:
                         bulk_data = [{'날짜': td_date, '반이름': c, '학생': student_name, '상태': status, '비고': memo} for c in classes_to_record]
                         add_data_bulk('attendance', bulk_data)
                         
-                        # 💡 등원 환영 및 자기주도학습 안내 메시지 분기 처리
                         if is_no_class_today:
-                            st.success(f"🎉 수업이 없는데도 스스로 공부하러 오다니 대단해요, **{student_name}** 학생!")
-                            st.info(f"🔥 현재 이번 달 누적 자기주도학습: **{acc_str}**\n\n⏱️ 지금부터 타이머 누적이 시작됩니다. 파이팅!")
+                            show_floating_popup("success", "🎉 대단해요!", 
+                                                f"수업이 없는데도 공부하러 온<br><b>[{student_name}]</b> 학생!", 
+                                                f"🔥 이번 달 누적 자습: <b>{acc_str}</b><br>⏱️ 지금부터 타이머 누적이 시작됩니다.")
                         elif is_weekend_study:
                             target_total = total_class_mins + 120
-                            st.success(f"📚 [{student_name}] 학생, 환영합니다! 오늘 목표 시간은 {target_total}분! 🔥")
-                            st.info(f"📈 현재 이번 달 누적 자기주도학습: **{acc_str}**")
+                            show_floating_popup("success", "📚 환영합니다!", 
+                                                f"<b>[{student_name}]</b> 학생,<br>오늘 목표 시간은 <b>{target_total}분</b>!", 
+                                                f"📈 이번 달 누적 자습: <b>{acc_str}</b>")
                         else:
-                            st.success(f"🏫 [{student_name}] 학생, 환영합니다! ({status})")
-                            st.info(f"📈 현재 이번 달 누적 자기주도학습: **{acc_str}**\n\n⏱️ 정규 수업 외의 체류 시간은 자습 시간으로 자동 기록됩니다.")
+                            show_floating_popup("success", "🏫 환영합니다!", 
+                                                f"<b>[{student_name}]</b> 학생 ({status})", 
+                                                f"📈 이번 달 누적 자습: <b>{acc_str}</b><br>⏱️ 수업 외 시간은 자습으로 기록됩니다.")
                         st.balloons()
                         
                 else:
@@ -1703,7 +1739,7 @@ elif menu == MENU_KIOSK:
                             allowed_time = datetime.combine(now.date(), today_end_time) - timedelta(minutes=10)
                             if now < allowed_time:
                                 can_leave = False
-                                lock_reason = f"정규 수업이 아직 끝나지 않았습니다. (종료 예정: {today_end_time.strftime('%H:%M')})"
+                                lock_reason = f"정규 수업이 아직 끝나지 않았습니다.<br>(종료 예정: {today_end_time.strftime('%H:%M')})"
                         
                         if is_weekend_study:
                             try:
@@ -1716,14 +1752,12 @@ elif menu == MENU_KIOSK:
                                     can_leave = False
                                     remain_mins = int(target_mins - elapsed_mins)
                                     if not lock_reason: 
-                                        lock_reason = f"아직 자기주도학습 목표를 채우지 못했습니다! (총 {target_mins}분 중 {int(elapsed_mins)}분 경과, {remain_mins}분 남음 🪑)"
+                                        lock_reason = f"아직 자습 목표를 채우지 못했습니다!<br>(총 {target_mins}분 중 {remain_mins}분 남음 🪑)"
                             except: pass
                         
                         if not can_leave:
-                            st.error(f"🚫 [{student_name}] 학생, 아직 하원 시간이 아닙니다!")
-                            st.warning(lock_reason)
+                            show_floating_popup("error", "🚫 아직 안돼요!", f"<b>[{student_name}]</b> 학생,<br>아직 하원 시간이 아닙니다!", lock_reason)
                         else:
-                            # 💡 자습 시간 계산 로직
                             stay_mins = 0
                             try:
                                 enter_time_str = last_memo.split()[1]
@@ -1739,7 +1773,6 @@ elif menu == MENU_KIOSK:
                                 today_self_study = max(0, stay_mins - total_class_mins)
 
                             bulk_data = []
-                            # 중복 계산 방지를 위해 첫 번째 수업 기록의 비고란에만 자습시간을 은밀하게 저장
                             for idx, c in enumerate(classes_to_record):
                                 final_status = "출석" if last_status == "입실" else "지각"
                                 if "주말자기주도" in c or c == "자기주도학습": final_status = "출석(추가)"
@@ -1752,29 +1785,24 @@ elif menu == MENU_KIOSK:
                             
                             add_data_bulk('attendance', bulk_data)
                             
-                            # 최종 메시지 렌더링
                             new_acc_mins = acc_mins + today_self_study
                             new_acc_str = f"{new_acc_mins // 60}시간 {new_acc_mins % 60}분" if new_acc_mins >= 60 else f"{new_acc_mins}분"
                             td_self_str = f"{today_self_study // 60}시간 {today_self_study % 60}분" if today_self_study >= 60 else f"{today_self_study}분"
                             
-                            st.markdown(f"""
-                            <div style='background-color: #E3F2FD; padding: 30px; border-radius: 20px; border: 3px solid #64B5F6; text-align: center; margin-top: 20px;'>
-                                <h1 style='color: #1565C0; margin-bottom: 10px; font-size: 32px;'>🏠 하원 처리 완료!</h1>
-                            """, unsafe_allow_html=True)
+                            sub_msg = f"📈 이번 달 총 누적 자습: <b style='color:#1565C0;'>{new_acc_str}</b>"
                             
                             if is_no_class_today:
-                                st.markdown(f"<h3 style='color: #333;'><b>[{student_name}]</b> 학생, 오늘 스스로 <b>{td_self_str}</b>이나 집중했어요! 👍</h3>", unsafe_allow_html=True)
+                                show_floating_popup("info", "🏠 하원 완료!", f"<b>[{student_name}]</b> 학생,<br>오늘 스스로 <b>{td_self_str}</b>이나 집중했어요! 👍", sub_msg)
                             else:
-                                st.markdown(f"<h3 style='color: #333;'><b>[{student_name}]</b> 학생, 수업 듣느라 고생 많았어요!</h3>", unsafe_allow_html=True)
-                                st.markdown(f"<h4 style='color: #555;'>(총 체류: {stay_mins}분 / 수업: {total_class_mins}분)</h4>", unsafe_allow_html=True)
                                 if today_self_study > 0:
-                                    st.markdown(f"<h3 style='color: #E65100; margin-top: 15px;'>✨ 오늘 추가 자기주도학습: <b>{td_self_str}</b> 달성!</h3>", unsafe_allow_html=True)
+                                    show_floating_popup("info", "🏠 하원 완료!", f"<b>[{student_name}]</b> 학생, 고생 많았어요!<br>✨ 오늘 추가 자습: <b style='color:#E65100;'>{td_self_str}</b> 달성!", sub_msg)
+                                else:
+                                    show_floating_popup("info", "🏠 하원 완료!", f"<b>[{student_name}]</b> 학생,<br>수업 듣느라 고생 많았어요!", sub_msg)
                             
-                            st.markdown(f"<hr><h4 style='color: #2E7D32;'>📈 이번 달 총 누적 자기주도학습: <b>{new_acc_str}</b></h4></div>", unsafe_allow_html=True)
                             st.snow()
                             
                     elif last_status in ["출석", "지각", "결석", "무단 조퇴", "조퇴(사유인정)", "출석(하원태그 누락)", "출석(추가)"]:
-                        st.info(f"👍 [{student_name}] 학생은 이미 오늘 출결 처리가 완료되었습니다.")
+                        show_floating_popup("info", "👍 확인 완료", f"<b>[{student_name}]</b> 학생은<br>이미 오늘 출결 처리가 완료되었습니다.")
 
         except ImportError:
             st.error("⚠️ QR 코드 인식 모듈(pyzbar, Pillow)이 설치되지 않았습니다.")
