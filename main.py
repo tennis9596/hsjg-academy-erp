@@ -363,8 +363,8 @@ if not st.session_state['logged_in']:
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
         with st.container(border=True):
-            # [핵심] 로그인 옵션에 '출석 키오스크' 추가!
-            login_type = st.radio("접속 모드 선택", ["👨‍🏫 강사", "👑 원장(관리자)", "📷 출석 키오스크"], horizontal=True)
+            # [수정] 키오스크를 맨 앞에 배치하여 기본값(index 0)으로 설정
+            login_type = st.radio("접속 모드 선택", ["📷 출석 키오스크", "👨‍🏫 강사", "👑 원장(관리자)"], horizontal=True)
             st.divider()
             
             if login_type == "👑 원장(관리자)":
@@ -670,28 +670,43 @@ if menu == MENU_DASHBOARD:
 
     
 
-    ## 4. 실시간 출결 관제 (경고창)
+    ## 4. 실시간 출결 관제 (경고창) - 강사 필터링 및 원클릭 방어막 적용
     col_alert, col_list = st.columns([1.2, 1])
     
     with col_alert:
-        st.markdown(f"##### 🚨 실시간 연락 요망 (수업 시작 10분 경과 미등원자)")
-        if not action_required:
+        st.markdown(f"##### 🚨 실시간 연락 요망 (수업 시작 10분 경과)")
+        
+        # 💡 [핵심 추가] 강사 로그인 시 본인 담당 반 학생만 필터링!
+        filtered_actions = []
+        for item in action_required:
+            c_tea = item[2] # 담당 강사 이름
+            if st.session_state['role'] == 'teacher':
+                if st.session_state['username'] not in c_tea:
+                    continue # 내 학생이 아니면 경고창에서 숨김
+            filtered_actions.append(item)
+
+        if not filtered_actions:
             st.success("✅ 현재 미등원(지각 의심) 학생이 없습니다. 모두 무사히 등원했습니다!")
         else:
             if selected_date == now.date() and 'last_action_req' not in st.session_state: st.session_state.last_action_req = 0
-            if selected_date == now.date() and len(action_required) > st.session_state.last_action_req:
-                st.toast("🚨 새로운 미등원(지각 의심) 학생이 감지되었습니다! 데스크 연락 바랍니다.", icon="🚨")
-                st.session_state.last_action_req = len(action_required)
+            if selected_date == now.date() and len(filtered_actions) > st.session_state.last_action_req:
+                st.toast("🚨 새로운 미등원 학생이 감지되었습니다!", icon="🚨")
+                st.session_state.last_action_req = len(filtered_actions)
                 
-            # 💡 [핵심 수정] enumerate를 사용해 고유 번호(idx)를 발급하여 중복 에러 완벽 차단!
-            for idx, (sn, cname, c_tea, tm, sph, pph) in enumerate(action_required):
+            for idx, (sn, cname, c_tea, tm, sph, pph) in enumerate(filtered_actions):
                 with st.container(border=True):
-                    c_text, c_btn = st.columns([3, 1])
-                    c_text.markdown(f"**[{cname}] {sn} 학생** (담당: :blue[{c_tea}] / 시작: {tm})")
+                    c_text, c_btn1, c_btn2 = st.columns([2.5, 1, 1])
+                    c_text.markdown(f"**[{cname}] {sn} 학생** (담당: :blue[{c_tea}] / {tm})")
                     c_text.caption(f"학생📱: {sph} | 부모님📞: {pph}")
                     
-                    # 버튼 key에 시작시간(tm)과 번호표(idx)를 붙여줍니다.
-                    if c_btn.button("결석 확정", key=f"btn_abs_{sn}_{cname}_{tm}_{idx}", type="primary"):
+                    # 💡 [방어막 1] 데스크/강사 교실 확인 수동 입실 버튼
+                    if c_btn1.button("✅ 교실 확인", key=f"btn_att_{sn}_{cname}_{tm}_{idx}", help="교실에 등원해 있다면 클릭"):
+                        add_data('attendance', {'날짜': target_str, '반이름': cname, '학생': sn, '상태': '출석(데스크확인)', '비고': 'QR누락 수동입실'})
+                        show_center_message(f"{sn} 정상 출석 처리 완료!")
+                        st.rerun()
+
+                    # 💡 [방어막 2] 기존 결석 확정 버튼
+                    if c_btn2.button("결석 확정", key=f"btn_abs_{sn}_{cname}_{tm}_{idx}", type="primary"):
                         add_data('attendance', {'날짜': target_str, '반이름': cname, '학생': sn, '상태': '결석', '비고': '관리자 수동 확정'})
                         show_center_message(f"{sn} 결석 처리 완료!")
                         st.rerun()
@@ -1609,8 +1624,26 @@ elif menu == MENU_KIOSK:
                 if is_weekend_study:
                     classes_to_record.append(f"주말자기주도({ws_subject})")
                 
+                is_no_class_today = False
                 if not classes_to_record:
-                    classes_to_record = ["미배정방문"]
+                    classes_to_record = ["자기주도학습"] # 미배정방문 대신 명칭 변경
+                    is_no_class_today = True
+
+                # 💡 [핵심] 이번 달 자기주도학습 누적 시간 계산 함수
+                def get_monthly_self_study(df_a_local, s_name, ym):
+                    total = 0
+                    if not df_a_local.empty:
+                        m_df = df_a_local[(df_a_local.iloc[:,0].astype(str).str.startswith(ym)) & (df_a_local.iloc[:,2] == s_name)]
+                        for _, r in m_df.iterrows():
+                            memo = str(r.get('비고', ''))
+                            if '자습:' in memo:
+                                try: total += int(memo.split('자습:')[1].split()[0])
+                                except: pass
+                    return total
+
+                target_ym = now.strftime('%Y-%m')
+                acc_mins = get_monthly_self_study(df_a, student_name, target_ym)
+                acc_str = f"{acc_mins // 60}시간 {acc_mins % 60}분" if acc_mins >= 60 else f"{acc_mins}분"
 
                 # 출결 기록 조회 (오늘 기록 중 첫 번째 기준)
                 rep_class = classes_to_record[0]
@@ -1619,29 +1652,45 @@ elif menu == MENU_KIOSK:
                     today_records = df_a[(df_a.iloc[:,0] == td_date) & (df_a.iloc[:,2] == student_name) & (df_a.iloc[:,1] == rep_class)]
                 
                 if today_records.empty:
-                    # 🟢 [1차 스캔: 등원]
+                    # 🟢 [1차 스캔: 등원 및 심야 누락 방어막]
                     from datetime import timedelta
-                    status = "입실"
-                    if today_start_time:
-                        limit_time = datetime.combine(now.date(), today_start_time) + timedelta(minutes=10)
-                        if now > limit_time:
-                            status = "지각(입실)"
                     
-                    memo = f"등원 {now.strftime('%H:%M')}"
-                    
-                    # 오늘 듣는 모든 반에 똑같이 '입실' 기록 쏴주기
-                    bulk_data = [{'날짜': td_date, '반이름': c, '학생': student_name, '상태': status, '비고': memo} for c in classes_to_record]
-                    add_data_bulk('attendance', bulk_data)
-                    
-                    if is_weekend_study:
-                        target_total = total_class_mins + 120
-                        st.success(f"📚 [{student_name}] 학생, 환영합니다! 오늘 목표 학습시간은 총 {target_total}분입니다. 화이팅! 🔥")
+                    if now.hour >= 21:
+                        status = "출석"
+                        memo = f"심야QR하원(등원누락보정) {now.strftime('%H:%M')} | 자습:0"
+                        bulk_data = [{'날짜': td_date, '반이름': c, '학생': student_name, '상태': status, '비고': memo} for c in classes_to_record]
+                        add_data_bulk('attendance', bulk_data)
+                        
+                        st.warning(f"⚠️ **[{student_name}]** 학생, 오늘 올 때 깜빡하고 QR을 안 찍었네요!")
+                        st.success(f"그래도 늦게까지 고생 많았어요. 정상 출석 처리되었습니다. 조심히 가요! 👋")
+                        st.snow()
+                        
                     else:
-                        st.success(f"🏫 [{student_name}] 학생, 환영합니다! ({status})")
-                    st.balloons()
-                    
+                        status = "입실"
+                        if today_start_time:
+                            limit_time = datetime.combine(now.date(), today_start_time) + timedelta(minutes=10)
+                            if now > limit_time:
+                                status = "지각(입실)"
+                        
+                        memo = f"등원 {now.strftime('%H:%M')}"
+                        bulk_data = [{'날짜': td_date, '반이름': c, '학생': student_name, '상태': status, '비고': memo} for c in classes_to_record]
+                        add_data_bulk('attendance', bulk_data)
+                        
+                        # 💡 등원 환영 및 자기주도학습 안내 메시지 분기 처리
+                        if is_no_class_today:
+                            st.success(f"🎉 수업이 없는데도 스스로 공부하러 오다니 대단해요, **{student_name}** 학생!")
+                            st.info(f"🔥 현재 이번 달 누적 자기주도학습: **{acc_str}**\n\n⏱️ 지금부터 타이머 누적이 시작됩니다. 파이팅!")
+                        elif is_weekend_study:
+                            target_total = total_class_mins + 120
+                            st.success(f"📚 [{student_name}] 학생, 환영합니다! 오늘 목표 시간은 {target_total}분! 🔥")
+                            st.info(f"📈 현재 이번 달 누적 자기주도학습: **{acc_str}**")
+                        else:
+                            st.success(f"🏫 [{student_name}] 학생, 환영합니다! ({status})")
+                            st.info(f"📈 현재 이번 달 누적 자기주도학습: **{acc_str}**\n\n⏱️ 정규 수업 외의 체류 시간은 자습 시간으로 자동 기록됩니다.")
+                        st.balloons()
+                        
                 else:
-                    # 🔴 [2차 스캔: 하원 시도]
+                    # 🔴 [2차 스캔: 하원 시도 및 자습 시간 정산]
                     last_status = today_records.iloc[-1]['상태']
                     last_memo = today_records.iloc[-1].get('비고', '')
                     
@@ -1649,7 +1698,6 @@ elif menu == MENU_KIOSK:
                         can_leave = True
                         lock_reason = ""
                         
-                        # 방어막 1: 정규 수업 종료 시간 체크
                         if today_end_time:
                             from datetime import timedelta
                             allowed_time = datetime.combine(now.date(), today_end_time) - timedelta(minutes=10)
@@ -1657,44 +1705,72 @@ elif menu == MENU_KIOSK:
                                 can_leave = False
                                 lock_reason = f"정규 수업이 아직 끝나지 않았습니다. (종료 예정: {today_end_time.strftime('%H:%M')})"
                         
-                        # 방어막 2: 총 체류 시간 체크 (자기주도학습 120분 추가)
                         if is_weekend_study:
                             try:
                                 enter_time_str = last_memo.split()[1] 
                                 eh, em = map(int, enter_time_str.split(':'))
                                 enter_dt = datetime.combine(now.date(), datetime.min.time()).replace(hour=eh, minute=em)
                                 elapsed_mins = (now - enter_dt).total_seconds() / 60
-                                
                                 target_mins = total_class_mins + 120
-                                
-                                if elapsed_mins < target_mins - 10: # 10분 정도의 여유는 줍니다
+                                if elapsed_mins < target_mins - 10: 
                                     can_leave = False
                                     remain_mins = int(target_mins - elapsed_mins)
-                                    if not lock_reason: # 정규 수업으로 안 막혔다면 자습 시간으로 팩트폭행
+                                    if not lock_reason: 
                                         lock_reason = f"아직 자기주도학습 목표를 채우지 못했습니다! (총 {target_mins}분 중 {int(elapsed_mins)}분 경과, {remain_mins}분 남음 🪑)"
                             except: pass
                         
                         if not can_leave:
-                            st.error(f"🚫 [{student_name}] 학생, 아직 종료시간이 아닙니다!")
+                            st.error(f"🚫 [{student_name}] 학생, 아직 하원 시간이 아닙니다!")
                             st.warning(lock_reason)
                         else:
-                            new_memo = f"하원 {now.strftime('%H:%M')}"
+                            # 💡 자습 시간 계산 로직
+                            stay_mins = 0
+                            try:
+                                enter_time_str = last_memo.split()[1]
+                                eh, em = map(int, enter_time_str.split(':'))
+                                enter_dt = datetime.combine(now.date(), datetime.min.time()).replace(hour=eh, minute=em)
+                                stay_mins = int((now - enter_dt).total_seconds() / 60)
+                            except: pass
+
+                            today_self_study = 0
+                            if is_no_class_today:
+                                today_self_study = stay_mins
+                            else:
+                                today_self_study = max(0, stay_mins - total_class_mins)
+
                             bulk_data = []
-                            # 나갈 때도 모든 수업 기록에 각각 출석 도장 쾅쾅!
-                            for c in classes_to_record:
+                            # 중복 계산 방지를 위해 첫 번째 수업 기록의 비고란에만 자습시간을 은밀하게 저장
+                            for idx, c in enumerate(classes_to_record):
                                 final_status = "출석" if last_status == "입실" else "지각"
-                                if "주말자기주도" in c: final_status = "출석(추가)"
+                                if "주말자기주도" in c or c == "자기주도학습": final_status = "출석(추가)"
+                                
+                                new_memo = f"하원 {now.strftime('%H:%M')}"
+                                if idx == 0 and today_self_study > 0:
+                                    new_memo += f" | 자습:{today_self_study}"
+                                    
                                 bulk_data.append({'날짜': td_date, '반이름': c, '학생': student_name, '상태': final_status, '비고': new_memo})
                             
                             add_data_bulk('attendance', bulk_data)
                             
+                            # 최종 메시지 렌더링
+                            new_acc_mins = acc_mins + today_self_study
+                            new_acc_str = f"{new_acc_mins // 60}시간 {new_acc_mins % 60}분" if new_acc_mins >= 60 else f"{new_acc_mins}분"
+                            td_self_str = f"{today_self_study // 60}시간 {today_self_study % 60}분" if today_self_study >= 60 else f"{today_self_study}분"
+                            
                             st.markdown(f"""
                             <div style='background-color: #E3F2FD; padding: 30px; border-radius: 20px; border: 3px solid #64B5F6; text-align: center; margin-top: 20px;'>
-                                <h1 style='color: #1565C0; margin-bottom: 10px; font-size: 36px;'>🏠 하원 처리 완료!</h1>
-                                <h3 style='color: #333;'><b>[{student_name}]</b> 학생, 오늘 진짜 고생 많았어요!</h3>
-                                <h4 style='color: #555;'>조심히 들어가세요 👋</h4>
-                            </div>
+                                <h1 style='color: #1565C0; margin-bottom: 10px; font-size: 32px;'>🏠 하원 처리 완료!</h1>
                             """, unsafe_allow_html=True)
+                            
+                            if is_no_class_today:
+                                st.markdown(f"<h3 style='color: #333;'><b>[{student_name}]</b> 학생, 오늘 스스로 <b>{td_self_str}</b>이나 집중했어요! 👍</h3>", unsafe_allow_html=True)
+                            else:
+                                st.markdown(f"<h3 style='color: #333;'><b>[{student_name}]</b> 학생, 수업 듣느라 고생 많았어요!</h3>", unsafe_allow_html=True)
+                                st.markdown(f"<h4 style='color: #555;'>(총 체류: {stay_mins}분 / 수업: {total_class_mins}분)</h4>", unsafe_allow_html=True)
+                                if today_self_study > 0:
+                                    st.markdown(f"<h3 style='color: #E65100; margin-top: 15px;'>✨ 오늘 추가 자기주도학습: <b>{td_self_str}</b> 달성!</h3>", unsafe_allow_html=True)
+                            
+                            st.markdown(f"<hr><h4 style='color: #2E7D32;'>📈 이번 달 총 누적 자기주도학습: <b>{new_acc_str}</b></h4></div>", unsafe_allow_html=True)
                             st.snow()
                             
                     elif last_status in ["출석", "지각", "결석", "무단 조퇴", "조퇴(사유인정)", "출석(하원태그 누락)", "출석(추가)"]:
