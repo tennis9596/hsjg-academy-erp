@@ -701,8 +701,9 @@ if menu == MENU_DASHBOARD:
                     
                     # 💡 [방어막 1] 데스크/강사 교실 확인 수동 입실 버튼
                     if c_btn1.button("✅ 교실 확인", key=f"btn_att_{sn}_{cname}_{tm}_{idx}", help="교실에 등원해 있다면 클릭"):
-                        add_data('attendance', {'날짜': target_str, '반이름': cname, '학생': sn, '상태': '출석(데스크확인)', '비고': 'QR누락 수동입실'})
-                        show_center_message(f"{sn} 정상 출석 처리 완료!")
+                        # [수정] 대시보드와 키오스크가 인식할 수 있도록 상태를 표준어인 '입실'로 바꿉니다.
+                        add_data('attendance', {'날짜': target_str, '반이름': cname, '학생': sn, '상태': '입실', '비고': '데스크 수동입실(QR누락)'})
+                        show_center_message(f"{sn} 정상 입실 처리 완료!")
                         st.rerun()
 
                     # 💡 [방어막 2] 기존 결석 확정 버튼
