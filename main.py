@@ -299,21 +299,30 @@ def delete_data_all(sheet_name, criteria_dict):
 
 # --- 유틸리티 및 시간 중복 체크 함수 ---
 def filter_active_classes(df_c, target_date=None):
-    """오늘 기준으로 유효한(기간이 안 끝난) 정규/보강 반만 걸러내는 마법의 필터"""
-    if df_c.empty: return df_c
+    """오늘 기준으로 유효한(기간이 안 끝난) 정규/보강 반만 걸러내는 절대 방어 필터"""
+    if df_c is None or df_c.empty: return df_c
     if target_date is None: target_date = datetime.today().date()
     
     active_idx = []
     for i, r in df_c.iterrows():
-        if r.get('구분', '정규') == '정규':
-            active_idx.append(i)
+        # 1. 데이터에 '보강'이라는 단어가 있는지 꼼꼼하게 검사
+        is_makeup = False
+        if '구분' in df_c.columns and '보강' in str(r['구분']): is_makeup = True
+        elif '보강' in str(r.values): is_makeup = True # 숨겨진 보강 글자까지 스캔
+        
+        if not is_makeup:
+            active_idx.append(i) # 정규반은 무조건 통과
         else:
             try:
-                ed = datetime.strptime(str(r.get('종료일', '')), "%Y-%m-%d").date()
-                if ed >= target_date: active_idx.append(i)
+                # 2. 보강반이면 종료일을 엄격하게 검사
+                ed_str = str(r.get('종료일', '')).strip()
+                ed = datetime.strptime(ed_str, "%Y-%m-%d").date()
+                if ed >= target_date: 
+                    active_idx.append(i) # 안 끝났으면 통과
             except:
-                active_idx.append(i)
-    return df_c.loc[active_idx]
+                pass # 날짜가 비어있거나 형식이 틀렸으면 무조건 삭제 (유령 퇴치!)
+                
+    return df_c.loc[active_idx].reset_index(drop=True)
 def calc_duration_min(s, e):
     try:
         # 파이썬 기본 시간함수는 24:00을 에러로 인식하므로, 수식으로 직접 계산하도록 업그레이드!
@@ -2222,7 +2231,10 @@ elif menu == MENU_ATTENDANCE:
 elif menu == MENU_TIMETABLE_T:
     st.subheader("📅 강사별 주간 시간표")
     df_c, df_t, df_e, df_s = load_data('classes'), load_data('teachers'), load_data('enrollments'), load_data('students')
-    df_c = filter_active_classes(df_c) # 💡 [추가] 기간이 종료된 유령 보강반은 시간표에서 싹 지웁니다!
+    
+    # 💡 [핵심] 초강력 필터가 여기서 데이터를 싹 청소합니다!
+    df_c = filter_active_classes(df_c)
+    
     if not df_t.empty and not df_c.empty:
         # 💡 [추가] 로그인한 강사의 데이터를 맨 앞으로 끌어올리는 마법의 정렬!
         if st.session_state['role'] == 'teacher':
@@ -2313,7 +2325,9 @@ elif menu == MENU_TIMETABLE_C:
     tab1, tab2 = st.tabs(["🏫 강의실별 일일 조회", "🖨️ 종합 주간 시간표 인쇄 (A3용)"])
     
     df_c, df_e, df_s = load_data('classes'), load_data('enrollments'), load_data('students')
-    df_c = filter_active_classes(df_c) # 💡 [추가] 기간이 종료된 유령 보강반은 여기서도 싹 지웁니다!
+    
+    # 💡 [핵심] 여기서도 필터가 한 번 더 청소합니다!
+    df_c = filter_active_classes(df_c)
     
     # --- [Tab 1] 기존 강의실별 일일 조회 ---
     with tab1:
