@@ -298,6 +298,22 @@ def delete_data_all(sheet_name, criteria_dict):
         return False
 
 # --- 유틸리티 및 시간 중복 체크 함수 ---
+def filter_active_classes(df_c, target_date=None):
+    """오늘 기준으로 유효한(기간이 안 끝난) 정규/보강 반만 걸러내는 마법의 필터"""
+    if df_c.empty: return df_c
+    if target_date is None: target_date = datetime.today().date()
+    
+    active_idx = []
+    for i, r in df_c.iterrows():
+        if r.get('구분', '정규') == '정규':
+            active_idx.append(i)
+        else:
+            try:
+                ed = datetime.strptime(str(r.get('종료일', '')), "%Y-%m-%d").date()
+                if ed >= target_date: active_idx.append(i)
+            except:
+                active_idx.append(i)
+    return df_c.loc[active_idx]
 def calc_duration_min(s, e):
     try:
         # 파이썬 기본 시간함수는 24:00을 에러로 인식하므로, 수식으로 직접 계산하도록 업그레이드!
@@ -1240,8 +1256,21 @@ elif menu == MENU_CLASS:
         if df_c.empty: st.info("개설된 반이 없습니다.")
         else:
             t_opts = (get_col_data(df_t, '이름', 0) + " (" + get_col_data(df_t, '과목', 1) + ")").tolist() if not df_t.empty else []
-            c_opts = df_c.iloc[:, 0].tolist()
-            sel_c_name = st.selectbox("수정할 반 선택", c_opts)
+            
+            # 💡 [핵심 수정] 기간 종료된 보강반은 이름 앞에 [기간종료] 딱지 붙여주기
+            c_opts = []
+            today_date = datetime.today().date()
+            for _, r in df_c.iterrows():
+                cn = str(r.iloc[0])
+                if r.get('구분', '정규') == '보강':
+                    try:
+                        ed = datetime.strptime(str(r.get('종료일', '')), "%Y-%m-%d").date()
+                        if ed < today_date: cn = f"🛑 [기간종료] {cn}"
+                    except: pass
+                c_opts.append(cn)
+                
+            sel_c_name_raw = st.selectbox("수정할 반/보강반 선택", c_opts)
+            sel_c_name = sel_c_name_raw.replace("🛑 [기간종료] ", "") if sel_c_name_raw else None
             
             if sel_c_name:
                 curr_row = df_c[df_c.iloc[:, 0] == sel_c_name].iloc[0]
@@ -1377,6 +1406,7 @@ elif menu == MENU_ENROLL:
     df_s = load_data('students')
     df_t = load_data('teachers')
     df_c = load_data('classes')
+    df_c = filter_active_classes(df_c) # 💡 [추가] 기간 종료된 보강반 숨기기!
 
     if 'confirm_cancel_target' not in st.session_state: st.session_state.confirm_cancel_target = None
 
@@ -1831,7 +1861,8 @@ elif menu == MENU_ATTENDANCE:
             td = c1.date_input("날짜", datetime.today())
             
             # 💡 [핵심 로직] 로그인한 사람이 강사라면 본인의 반만 목록에 띄웁니다!
-            raw_class_list = sorted(df_e.iloc[:,2].unique().tolist())
+            active_c_names = filter_active_classes(df_c).iloc[:,0].tolist() if not df_c.empty else []
+            raw_class_list = sorted([c for c in df_e.iloc[:,2].unique().tolist() if c in active_c_names]) # 💡 [수정] 기간 종료 반 제외
             if st.session_state['role'] == 'teacher':
                 my_name = st.session_state['username']
                 if not df_c.empty:
@@ -2191,6 +2222,7 @@ elif menu == MENU_ATTENDANCE:
 elif menu == MENU_TIMETABLE_T:
     st.subheader("📅 강사별 주간 시간표")
     df_c, df_t, df_e, df_s = load_data('classes'), load_data('teachers'), load_data('enrollments'), load_data('students')
+    df_c = filter_active_classes(df_c) # 💡 [추가] 기간이 종료된 유령 보강반은 시간표에서 싹 지웁니다!
     if not df_t.empty and not df_c.empty:
         # 💡 [추가] 로그인한 강사의 데이터를 맨 앞으로 끌어올리는 마법의 정렬!
         if st.session_state['role'] == 'teacher':
@@ -2281,6 +2313,7 @@ elif menu == MENU_TIMETABLE_C:
     tab1, tab2 = st.tabs(["🏫 강의실별 일일 조회", "🖨️ 종합 주간 시간표 인쇄 (A3용)"])
     
     df_c, df_e, df_s = load_data('classes'), load_data('enrollments'), load_data('students')
+    df_c = filter_active_classes(df_c) # 💡 [추가] 기간이 종료된 유령 보강반은 여기서도 싹 지웁니다!
     
     # --- [Tab 1] 기존 강의실별 일일 조회 ---
     with tab1:
