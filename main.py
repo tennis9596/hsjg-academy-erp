@@ -540,6 +540,9 @@ if menu == MENU_DASHBOARD:
     
     df_s, df_t, df_c, df_a, df_e = load_data('students'), load_data('teachers'), load_data('classes'), load_data('attendance'), load_data('enrollments') 
     
+    # 💡 [핵심 추가] 대시보드에도 초강력 필터를 장착하여 유령 보강반을 싹 지웁니다!
+    df_c = filter_active_classes(df_c, selected_date)
+    
     # 1. 오늘 예정된 모든 수업과 수강생 명단 추출
     days_ko = ["월", "화", "수", "목", "금", "토", "일"]
     target_yoil = days_ko[selected_date.weekday()]
@@ -2603,12 +2606,43 @@ elif menu == MENU_STUDENT_INFO:
             if not df_e.empty:
                 try:
                     my_classes = df_e[df_e.iloc[:,0] == real_name]
-                    if my_classes.empty: st.info("현재 수강 중인 수업이 없습니다.")
+                    if my_classes.empty: st.info("현재 배정된 수업이 없습니다.")
                     else:
-                        display_df = my_classes.iloc[:, [1, 2, 3]]
-                        display_df.columns = ["수강 과목", "수강 반", "담당 선생님"]
-                        st.dataframe(display_df, use_container_width=True, hide_index=True)
-                except: st.error("데이터 구조를 불러오는 중입니다.")
+                        # 💡 [핵심 수정] 정규/보강 분리 및 보강 누적 횟수 계산
+                        reg_list = []
+                        makeup_counts = {} 
+                        
+                        for _, r in my_classes.iterrows():
+                            c_subj = r.iloc[1]
+                            c_name = r.iloc[2]
+                            c_teacher = r.iloc[3]
+                            c_status = r.get('상태', '수강중')
+                            
+                            c_type = '정규'
+                            if not df_c.empty:
+                                c_info = df_c[df_c.iloc[:,0] == c_name]
+                                if not c_info.empty: c_type = c_info.iloc[0].get('구분', '정규')
+                                
+                            if c_type == '보강':
+                                makeup_counts[c_subj] = makeup_counts.get(c_subj, 0) + 1
+                            elif c_status != '수강종료': # 정규반은 현재 수강 중인 것만
+                                reg_list.append({
+                                    "수강 과목": c_subj,
+                                    "정규 수강 반": c_name,
+                                    "담당 선생님": c_teacher
+                                })
+                        
+                        # 정규반 목록 옆에 '보강 누적 횟수' 열 추가
+                        for item in reg_list:
+                            subj = item["수강 과목"]
+                            item["보강 누적 배정"] = f"{makeup_counts.get(subj, 0)}회"
+                            
+                        if not reg_list:
+                            st.info("현재 수강 중인 정규 수업이 없습니다.")
+                        else:
+                            display_df = pd.DataFrame(reg_list)
+                            st.dataframe(display_df, use_container_width=True, hide_index=True)
+                except Exception as e: st.error(f"데이터 구조를 불러오는 중 오류가 발생했습니다: {e}")
             else: st.info("수강 기록이 없습니다.")
 
             st.divider()
@@ -2642,9 +2676,11 @@ elif menu == MENU_STUDENT_INFO:
                     for _, row in month_data.iterrows():
                         d_str = str(row.iloc[0])
                         day_int = int(d_str.split('-')[2])
-                        status = row.iloc[3]
+                        c_name = str(row.iloc[1]) # 💡 반이름 추출
+                        status = str(row.iloc[3])
+                        
                         if day_int not in att_map: att_map[day_int] = []
-                        att_map[day_int].append(status)
+                        att_map[day_int].append((status, c_name)) # 💡 상태와 반이름을 함께 저장
                 except: pass
 
             calendar.setfirstweekday(calendar.SUNDAY)
@@ -2679,10 +2715,20 @@ elif menu == MENU_STUDENT_INFO:
                             
                             if day in att_map:
                                 statuses = att_map[day]
-                                for s in statuses:
-                                    if s == '출석': st.markdown(f"<span style='color:green; font-size:0.8rem; font-weight:bold;'>🟢 출석</span>", unsafe_allow_html=True)
-                                    elif s == '지각': st.markdown(f"<span style='color:orange; font-size:0.8rem; font-weight:bold;'>🟠 지각</span>", unsafe_allow_html=True)
-                                    elif s == '결석': st.markdown(f"<span style='color:red; font-size:0.8rem; font-weight:bold;'>🔴 결석</span>", unsafe_allow_html=True)
+                                for s, c_name in statuses:
+                                    short_c = c_name[:8] + ".." if len(c_name) > 8 else c_name
+                                    
+                                    if '출석' in s or '입실' in s or '조퇴' in s: 
+                                        color, icon = "green", "🟢"
+                                    elif '지각' in s: 
+                                        color, icon = "orange", "🟠"
+                                    elif '결석' in s or '무단' in s: 
+                                        color, icon = "red", "🔴"
+                                    else:
+                                        color, icon = "gray", "⚪"
+                                        
+                                    # 💡 [핵심] 상태 기호 아래에 작고 예쁘게 반이름 표기
+                                    st.markdown(f"<div style='line-height:1.2; margin-top:3px;'><span style='color:{color}; font-size:0.75rem; font-weight:bold;'>{icon} {s[:2]}</span><br><span style='color:#555; font-size:0.65rem; letter-spacing:-0.5px;'>{short_c}</span></div>", unsafe_allow_html=True)
                             else: st.markdown("<br>", unsafe_allow_html=True)
             
             # 여기서부터 찌꺼기로 남았던 에러 부분이 완벽하게 정리되었습니다!
@@ -2828,7 +2874,7 @@ elif menu == MENU_STUDENT_INFO:
                         mc1, mc2 = st.columns(2)
                         with mc1:
                             st.markdown(f"<div style='padding:15px; background-color:#E3F2FD; border-radius:10px; border-left:6px solid #1565C0; margin-bottom:15px;'>"
-                                        f"<h6 style='margin:0 0 8px 0; color:#1565C0;'>🔵 정규 수업 (월 예정: {subj_expected_regular}회)</h6>"
+                                        f"<h6 style='margin:0 0 8px 0; color:#1565C0;'>🔵 정규 수업 (월 {subj_expected_regular}회)</h6>"
                                         f"<span style='font-size:1.05rem; color:#333;'>"
                                         f"<b>출석:</b> <span style='color:green;'>{reg_att}</span>회 &nbsp;|&nbsp; "
                                         f"<b>지각:</b> <span style='color:orange;'>{reg_late}</span>회 &nbsp;|&nbsp; "
